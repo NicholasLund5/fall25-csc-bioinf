@@ -9,15 +9,19 @@ def reverse_complement(key):
 
 class Node:
     def __init__(self, kmer):
-        self._children = set()
+        # Initialize with a dummy value then remove it to help with type inference
+        self._children = [0]
+        self._children.clear()  # Clear it but keep the type as List[int]
         self._count = 0
         self.kmer = kmer
         self.visited = False
         self.depth = 0
-        self.max_depth_child = None
+        self.max_depth_child = -1
 
     def add_child(self, kmer):
-        self._children.add(kmer)
+        # Only add if not already present (to simulate set behavior)
+        if kmer not in self._children:
+            self._children.append(kmer)
 
     def increase(self):
         self._count += 1
@@ -25,25 +29,35 @@ class Node:
     def reset(self):
         self.visited = False
         self.depth = 0
-        self.max_depth_child = None
+        self.max_depth_child = -1
 
     def get_count(self):
         return self._count
 
     def get_children(self):
-        return list(self._children)
+        return self._children.copy()  # Return a copy to maintain encapsulation
 
     def remove_children(self, target):
-        self._children = self._children - target
+        # Remove children that are in the target set
+        new_children = []
+        for child in self._children:
+            if child not in target:
+                new_children.append(child)
+        self._children = new_children
 
 
 class DBG:
     def __init__(self, k, data_list):
         self.k = k
-        self.nodes = {}
-        # private
-        self.kmer2idx = {}
         self.kmer_count = 0
+        
+        # Initialize with proper types
+        first_kmer = data_list[0][0][:k] if data_list and data_list[0] and len(data_list[0][0]) >= k else "A" * k
+        
+        self.kmer2idx = {first_kmer: 0}
+        self.nodes = {0: Node(first_kmer)}
+        self.kmer_count = 1
+        
         # build
         self._check(data_list)
         self._build(data_list)
@@ -56,10 +70,19 @@ class DBG:
     def _build(self, data_list):
         for data in data_list:
             for original in data:
-                rc = reverse_complement(original)
-                for i in range(len(original) - self.k - 1):
-                    self._add_arc(original[i: i + self.k], original[i + 1: i + 1 + self.k])
-                    self._add_arc(rc[i: i + self.k], rc[i + 1: i + 1 + self.k])
+                if len(original) > self.k:  # Only process if sequence is longer than k
+                    rc = reverse_complement(original)
+                    for i in range(len(original) - self.k - 1):
+                        kmer1 = original[i: i + self.k]
+                        kmer2 = original[i + 1: i + 1 + self.k]
+                        if len(kmer2) == self.k:  # Ensure kmer2 is valid length
+                            self._add_arc(kmer1, kmer2)
+                            
+                        # Do the same for reverse complement
+                        rc_kmer1 = rc[i: i + self.k]
+                        rc_kmer2 = rc[i + 1: i + 1 + self.k]
+                        if len(rc_kmer2) == self.k:  # Ensure kmer2 is valid length
+                            self._add_arc(rc_kmer1, rc_kmer2)
 
     def _add_node(self, kmer):
         if kmer not in self.kmer2idx:
@@ -87,7 +110,7 @@ class DBG:
         if not self.nodes[idx].visited:
             self.nodes[idx].visited = True
             children = self._get_sorted_children(idx)
-            max_depth, max_child = 0, None
+            max_depth, max_child = 0, -1
             for child in children:
                 depth = self._get_depth(child)
                 if depth > max_depth:
@@ -100,23 +123,24 @@ class DBG:
             self.nodes[idx].reset()
 
     def _get_longest_path(self):
-        max_depth, max_idx = 0, None
+        max_depth, max_idx = 0, -1
         for idx in self.nodes.keys():
             depth = self._get_depth(idx)
             if depth > max_depth:
                 max_depth, max_idx = depth, idx
 
         path = []
-        while max_idx is not None:
+        while max_idx != -1:
             path.append(max_idx)
             max_idx = self.nodes[max_idx].max_depth_child
         return path
 
     def _delete_path(self, path):
         for idx in path:
-            del self.nodes[idx]
-        path_set = set(path)
-        for idx in self.nodes.keys():
+            if idx in self.nodes:
+                del self.nodes[idx]
+        path_set = set(path)  # Convert to set for faster lookup
+        for idx in list(self.nodes.keys()):
             self.nodes[idx].remove_children(path_set)
 
     def _concat_path(self, path):

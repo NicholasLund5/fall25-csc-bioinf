@@ -1,0 +1,55 @@
+from dbg import DBG
+from utils import read_data, calculate_n50
+import sys
+import os
+import time
+
+if __name__ == "__main__":
+    # Start timing
+    start_time = time.time()
+    
+    argv = sys.argv
+    short1, short2, long1 = read_data('./' + argv[1])
+    
+    k = 25
+    dbg = DBG(k=k, data_list=[short1, short2, long1])
+    
+    # Store contigs for N50 calculation
+    contigs = []
+    
+    contig_file = './' + argv[1] + '/contig.fasta'
+    with open(contig_file, 'w') as f:
+        for i in range(20):
+            c = dbg.get_longest_contig()
+            if c is None:
+                break
+            contigs.append(c)
+            # Use simple string concatenation instead of f-strings
+            header = ">contig_" + str(i) + "\n" + c
+            print(header, file=f)
+    
+    # End timing
+    end_time = time.time()
+    total_time = end_time - start_time
+    
+    # Calculate N50
+    n50 = calculate_n50(contigs)
+    
+    # Write statistics to file
+    stats_file = './' + argv[1] + '/assembly_stats.txt'
+    with open(stats_file, 'w') as f:
+        print("Assembly Statistics", file=f)
+        print("===================", file=f)
+        # Use simple string concatenation instead of f-strings with format specifiers
+        time_str = "Total execution time: " + str(round(total_time, 2)) + " seconds"
+        print(time_str, file=f)
+        contig_count_str = "Number of contigs: " + str(len(contigs))
+        print(contig_count_str, file=f)
+        n50_str = "N50: " + str(n50)
+        print(n50_str, file=f)
+        lengths_str = "Contig lengths: " + str([len(c) for c in contigs])
+        print(lengths_str, file=f)
+    
+    # Use simple string concatenation for final output
+    result = argv[1] + "  codon  " + str(round(total_time, 2)) + "  " + str(n50)
+    print(result)

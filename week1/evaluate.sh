@@ -4,10 +4,10 @@
 set -euo pipefail
 
 # Unzip all datasets
-unzip -o week1/data/data1.zip >/dev/null
-unzip -o week1/data/data2.zip >/dev/null
-unzip -o week1/data/data3.zip >/dev/null
-unzip -o week1/data/data4.zip >/dev/null
+unzip -o week1/data/data1.zip >/dev/null -d week1
+unzip -o week1/data/data2.zip >/dev/null -d week1
+unzip -o week1/data/data3.zip >/dev/null -d week1
+unzip -o week1/data/data4.zip >/dev/null -d week1
 
 # Set stack size limit
 ulimit -s 8192000 >/dev/null 2>&1
@@ -18,5 +18,7 @@ echo "------------------------------"
 
 # Process each dataset
 for dataset in data1 data2 data3 data4; do
-    python3 week1/code/main.py "$dataset"
+    python3 week1/code/main.py week1/"$dataset"
+    codon build -release week1/code/main.codon -o main_codon_exe
+    ./main_codon_exe week1/"$dataset"
 done

@@ -1,7 +1,4 @@
-Repo setup: No AI
-Python setup & runs: No AI
-Bash script for python + NGA50 calculations:
-Claude sonnet 4: 
+(Claude sonnet 4)
 Promt 1: 
 This code is run by using python main.py data/data1 and contains 3 files in use and one file not in use maybe as a refence to help [main.py] [utils.py] and [dbg.py]
 it works how it is currently, but I want to calculate and output 2 things: 1. total time and 2. nga50 for the data. add this capability please
@@ -16,3 +13,13 @@ This will save you a significant amount of debugging time.Run Python code automa
 Programmatically compile the results and runtimes. 
 all i want is to out put 6 lines in total, line 1- headers: dataset language, runtime and nga50, line 2: dashes line 3-6 data1-4 python runtime calcs and nga50 calcs, there should be no console output
 
+Prompt 3:
+change this from nga50 to n50 as nga 50 needs refence data which I don't have
+
+prompt 4:
+to change these 3 files from python to codon we will need to rely on less of the imported libraries, i've found the troubled ones to be f-string formatting on the final output line, codon needs to know the type of elements that will be stored in lists/sets, 
+cannot have dictionaries initalized empty, cannot use os.path.join or sys.setrecusionlimit, make all these changes to the 3 files and add the build and execute commands to the bash script
+
+(GPT-5 mini)
+prompt 1:
+clean this up the tiniest bit to look better in a readme [report.md]
