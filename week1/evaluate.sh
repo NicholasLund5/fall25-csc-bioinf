@@ -1,4 +1,5 @@
 #!/bin/bash
+export PATH="${HOME}/.codon/bin:$PATH"
 
 # Enable strict error handling
 set -euo pipefail
