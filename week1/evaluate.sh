@@ -13,7 +13,7 @@ unzip -o week1/data/data4.zip >/dev/null
 ulimit -s 8192000 >/dev/null 2>&1
 
 # Print header
-echo "Dataset Language Runtime NGA50"
+echo "Dataset Language Runtime N50"
 echo "------------------------------"
 
 # Process each dataset

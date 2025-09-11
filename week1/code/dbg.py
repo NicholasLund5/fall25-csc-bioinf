@@ -1,6 +1,4 @@
 import copy
-from matplotlib import pyplot as plt
-
 
 def reverse_complement(key):
     complement = {'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G'}
@@ -64,14 +62,7 @@ class DBG:
                 for i in range(len(original) - self.k - 1):
                     self._add_arc(original[i: i + self.k], original[i + 1: i + 1 + self.k])
                     self._add_arc(rc[i: i + self.k], rc[i + 1: i + 1 + self.k])
-
-    def show_count_distribution(self):
-        count = [0] * 30
-        for idx in self.nodes:
-            count[self.nodes[idx].get_count()] += 1
-        # plt.plot(count)
-        # plt.show()
-
+                    
     def _add_node(self, kmer):
         if kmer not in self.kmer2idx:
             self.kmer2idx[kmer] = self.kmer_count
