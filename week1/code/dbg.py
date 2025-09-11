@@ -69,7 +69,6 @@ class DBG:
         count = [0] * 30
         for idx in self.nodes:
             count[self.nodes[idx].get_count()] += 1
-        print(count[0:10])
         # plt.plot(count)
         # plt.show()
 

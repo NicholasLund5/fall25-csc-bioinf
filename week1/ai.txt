@@ -1,0 +1,18 @@
+Repo setup: No AI
+Python setup & runs: No AI
+Bash script for python + NGA50 calculations:
+Claude sonnet 4: 
+Promt 1: 
+This code is run by using python main.py data/data1 and contains 3 files in use and one file not in use maybe as a refence to help [main.py] [utils.py] and [dbg.py]
+it works how it is currently, but I want to calculate and output 2 things: 1. total time and 2. nga50 for the data. add this capability please
+
+Prompt 2:
+ok, in linux i had to run these commands for all 4 to work 
+unzip data/data1-4.zip     
+ulimit -s 8192000      
+python3 code/main.py data1-4 
+create a bash file week1/evaluate.sh which If using Bash, add set -euxo pipefail to the beginning of the test script to ensure that the script terminates immediately if something goes wrong. 
+This will save you a significant amount of debugging time.Run Python code automatically.
+Programmatically compile the results and runtimes. 
+all i want is to out put 6 lines in total, line 1- headers: dataset language, runtime and nga50, line 2: dashes line 3-6 data1-4 python runtime calcs and nga50 calcs, there should be no console output
+
