@@ -8,7 +8,8 @@ echo "Testing BioPython Motifs Port to Codon"
 echo "======================================="
 
 echo "Compiling motifs tests..."
-codon build -release week2/code/test_motifs.codon -o test_motifs_exe
+codon build -release week2/code/matrix_test.codon -o test_matrix_exe
+codon build -release week2/code/minimal_test.codon -o test_minimal_exe
 
 echo "Running motifs tests..."
 
@@ -21,6 +22,7 @@ if [ -z "${CODON_PYTHON:-}" ]; then
   echo "Using CODON_PYTHON=$CODON_PYTHON"
 fi
 
-./test_motifs_exe
+./test_matrix_exe
+./test_minimal_exe
 
 echo "All tests completed successfully!"

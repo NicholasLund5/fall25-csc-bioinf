@@ -1,221 +1,335 @@
-# Copyright 2018 by Ariel Aptekmann.
-# All rights reserved.
-#
-# This file is part of the Biopython distribution and governed by your
-# choice of the "Biopython License Agreement" or the "BSD 3-Clause License".
-# Please see the LICENSE file that should have been included as part of this
-# package.
-"""Module for the support of MEME minimal motif format."""
+"""
+Bio.motifs.minimal - Codon Implementation
 
-from Bio import motifs
+Port of BioPython's MEME minimal motif format parser to Codon for high-performance
+computational biology applications.
+
+Key Codon Adaptations from Original BioPython:
+- Replaced file handle iteration with explicit line reading
+- Simplified string parsing without complex regex or advanced string methods
+- Used explicit type annotations (List, Dict, Optional) for static compilation
+- Removed Bio.motifs dependency - implemented minimal Motif class locally
+- Simplified exception handling (generic Exception instead of ValueError)
+- Replaced list comprehensions with explicit loops where needed
+- Used manual string splitting and parsing instead of complex operations
+- Removed doctest integration and advanced BioPython features
+- Implemented minimal file I/O without BioPython's handle management
+
+Classes Implemented:
+- Record: Container for MEME minimal format results
+- Motif: Minimal motif representation with counts and metadata
+- FrequencyPositionMatrix: Basic count matrix (subset needed for minimal format)
+
+Performance optimizations maintain API compatibility while enabling static compilation
+for parsing MEME minimal format files in computational biology pipelines.
+"""
+
+from matrix import FrequencyPositionMatrix
+from typing import Optional, Tuple
+
+class Motif:
+    """Minimal motif class for MEME format compatibility."""
+    
+    def __init__(self, alphabet: str, counts: Dict[str, List[int]]):
+        """Initialize motif with alphabet and count matrix."""
+        self.alphabet = alphabet
+        self.counts = FrequencyPositionMatrix(alphabet, counts)
+        self.background = Dict[str, float]()
+        self.length = self.counts.length
+        self.num_occurrences = 0
+        self.evalue = 0.0
+        self.name = ""
 
 
-def read(handle):
-    """Parse the text output of the MEME program into a meme.Record object.
+class Record:
+    """Class for holding the results of a minimal MEME run."""
+    
+    def __init__(self):
+        """Initialize record class values."""
+        self.version = ""
+        self.datafile = ""
+        self.command = ""
+        self.alphabet = ""
+        self.background = Dict[str, float]()
+        self.sequences = List[str]()
+        self._motifs = List[Motif]()
+        self._motif_names = Dict[str, int]()
+    
+    def append(self, motif: Motif):
+        """Add a motif to the record."""
+        index = len(self._motifs)
+        self._motifs.append(motif)
+        if motif.name:
+            self._motif_names[motif.name] = index
+    
+    def __len__(self) -> int:
+        """Return number of motifs in record."""
+        return len(self._motifs)
+    
+    def __getitem__(self, key):
+        """Return the motif of index key."""
+        if isinstance(key, str):
+            if key in self._motif_names:
+                index = self._motif_names[key]
+                return self._motifs[index]
+            else:
+                raise KeyError("Motif '" + key + "' not found")
+        elif isinstance(key, int):
+            return self._motifs[key]
+        else:
+            raise TypeError("Key must be string or int")
+    
+    def __iter__(self):
+        """Iterate over motifs in record."""
+        return iter(self._motifs)
 
-    Examples
-    --------
-    >>> from Bio.motifs import minimal
-    >>> with open("motifs/meme.out") as f:
-    ...     record = minimal.read(f)
-    ...
-    >>> for motif in record:
-    ...     print(motif.name, motif.evalue)
-    ...
-    1 1.1e-22
 
-    You can access individual motifs in the record by their index or find a motif
-    by its name:
-
-    >>> from Bio import motifs
-    >>> with open("motifs/minimal_test.meme") as f:
-    ...     record = motifs.parse(f, 'minimal')
-    ...
-    >>> motif = record[0]
-    >>> print(motif.name)
-    KRP
-    >>> motif = record['IFXA']
-    >>> print(motif.name)
-    IFXA
-
-    This function won't retrieve instances, as there are none in minimal meme format.
-
+def read(handle) -> Record:
+    """Parse the text output of the MEME program into a Record object.
+    
+    Args:
+        handle: File handle or list of strings containing MEME minimal format
+        
+    Returns:
+        Record object containing parsed motifs
     """
     motif_number = 0
     record = Record()
-    _read_version(record, handle)
-    _read_alphabet(record, handle)
-    _read_background(record, handle)
-
-    while True:
-        for line in handle:
+    
+    # Convert handle to list of lines if it's a file-like object
+    if hasattr(handle, 'readlines'):
+        lines = handle.readlines()
+    elif hasattr(handle, '__iter__'):
+        lines = list(handle)
+    else:
+        raise TypeError("Handle must be file-like or iterable")
+    
+    line_index = 0
+    
+    # Read version
+    line_index = _read_version(record, lines, line_index)
+    
+    # Read alphabet
+    line_index = _read_alphabet(record, lines, line_index)
+    
+    # Read background
+    line_index = _read_background(record, lines, line_index)
+    
+    # Read motifs
+    while line_index < len(lines):
+        # Find next motif
+        while line_index < len(lines):
+            line = lines[line_index].strip()
             if line.startswith("MOTIF"):
                 break
+            line_index += 1
         else:
-            return record
-        name = line.split()[1]
+            # No more motifs found
+            break
+        
+        # Parse motif name
+        parts = line.split()
+        if len(parts) < 2:
+            raise Exception("Invalid MOTIF line format: " + line)
+        name = parts[1]
         motif_number += 1
-        length, num_occurrences, evalue = _read_motif_statistics(handle)
-        counts = _read_lpm(record, handle, length, num_occurrences)
-        # {'A': 0.25, 'C': 0.25, 'T': 0.25, 'G': 0.25}
-        motif = motifs.Motif(alphabet=record.alphabet, counts=counts)
+        line_index += 1
+        
+        # Read motif statistics and matrix
+        length, num_occurrences, evalue, line_index = _read_motif_statistics(lines, line_index)
+        counts, line_index = _read_lpm(record, lines, line_index, length, num_occurrences)
+        
+        # Create motif
+        motif = Motif(record.alphabet, counts)
         motif.background = record.background
         motif.length = motif.counts.length
         motif.num_occurrences = num_occurrences
         motif.evalue = evalue
         motif.name = name
         record.append(motif)
-        assert len(record) == motif_number
+    
     return record
 
 
-class Record(list):
-    """Class for holding the results of a minimal MEME run."""
-
-    def __init__(self):
-        """Initialize record class values."""
-        self.version = ""
-        self.datafile = ""
-        self.command = ""
-        self.alphabet = None
-        self.background = {}
-        self.sequences = []
-
-    def __getitem__(self, key):
-        """Return the motif of index key."""
-        if isinstance(key, str):
-            for motif in self:
-                if motif.name == key:
-                    return motif
-        else:
-            return list.__getitem__(self, key)
-
-
-# Everything below is private
-
-
-def _read_background(record, handle):
-    """Read background letter frequencies (PRIVATE)."""
-    for line in handle:
-        if line.startswith("Background letter frequencies"):
-            background_freqs = []
-            for line in handle:
-                line = line.rstrip()
-                if line:
-                    background_freqs.extend(
-                        [
-                            float(freq)
-                            for i, freq in enumerate(line.split(" "))
-                            if i % 2 == 1
-                        ]
-                    )
-                else:
-                    break
-            if not background_freqs:
-                raise ValueError(
-                    "Unexpected end of stream: Expected to find line starting background frequencies."
-                )
-            break
-    else:
-        raise ValueError(
-            "Improper input file. File should contain a line starting background frequencies."
-        )
-    record.background = dict(zip(record.alphabet, background_freqs))
-
-
-def _read_version(record, handle):
+def _read_version(record: Record, lines: List[str], start_index: int) -> int:
     """Read MEME version (PRIVATE)."""
-    for line in handle:
+    line_index = start_index
+    while line_index < len(lines):
+        line = lines[line_index].strip()
         if line.startswith("MEME version"):
-            break
-    else:
-        raise ValueError(
-            "Improper input file. File should contain a line starting MEME version."
-        )
-    line = line.strip()
-    ls = line.split()
-    record.version = ls[2]
+            parts = line.split()
+            if len(parts) >= 3:
+                record.version = parts[2]
+            return line_index + 1
+        line_index += 1
+    
+    raise Exception("Improper input file. File should contain a line starting with 'MEME version'")
 
 
-def _read_alphabet(record, handle):
+def _read_alphabet(record: Record, lines: List[str], start_index: int) -> int:
     """Read alphabet (PRIVATE)."""
-    for line in handle:
+    line_index = start_index
+    while line_index < len(lines):
+        line = lines[line_index].strip()
         if line.startswith("ALPHABET"):
+            if not line.startswith("ALPHABET= "):
+                raise Exception("Line does not start with 'ALPHABET= ':\n" + line)
+            
+            alphabet_part = line.replace("ALPHABET= ", "")
+            if alphabet_part == "ACGT":
+                record.alphabet = "ACGT"
+            elif alphabet_part == "ACGU":
+                record.alphabet = "ACGU"
+            else:
+                raise Exception("Only parsing of DNA and RNA motifs is implemented")
+            
+            return line_index + 1
+        line_index += 1
+    
+    raise Exception("Unexpected end of stream: Expected to find line starting with 'ALPHABET'")
+
+
+def _read_background(record: Record, lines: List[str], start_index: int) -> int:
+    """Read background letter frequencies (PRIVATE)."""
+    line_index = start_index
+    
+    # Find background frequencies line
+    while line_index < len(lines):
+        line = lines[line_index].strip()
+        if line.startswith("Background letter frequencies"):
+            line_index += 1
             break
+        line_index += 1
     else:
-        raise ValueError(
-            "Unexpected end of stream: Expected to find line starting with 'ALPHABET'"
-        )
-    if not line.startswith("ALPHABET= "):
-        raise ValueError("Line does not start with 'ALPHABET':\n%s" % line)
-    line = line.strip().replace("ALPHABET= ", "")
-    if line == "ACGT":
-        al = "ACGT"
-    elif line == "ACGU":
-        al = "ACGU"
-    else:
-        # al = "ACDEFGHIKLMNPQRSTVWY"
-        raise ValueError("Only parsing of DNA and RNA motifs is implemented")
-    record.alphabet = al
-
-
-def _read_lpm(record, handle, length, num_occurrences):
-    """Read letter probability matrix (PRIVATE)."""
-    counts = [[], [], [], []]
-    for line in handle:
-        freqs = line.split()
-        if len(freqs) != 4:
+        raise Exception("Improper input file. File should contain a line starting with 'Background letter frequencies'")
+    
+    # Read frequency lines
+    background_freqs = List[float]()
+    while line_index < len(lines):
+        line = lines[line_index].strip()
+        if not line:
+            # Empty line indicates end of background section
             break
-        counts[0].append(round(float(freqs[0]) * num_occurrences))
-        counts[1].append(round(float(freqs[1]) * num_occurrences))
-        counts[2].append(round(float(freqs[2]) * num_occurrences))
-        counts[3].append(round(float(freqs[3]) * num_occurrences))
-        if length and len(counts[0]) == length:
-            break
-    c = dict(zip(record.alphabet, counts))
-    return c
+        
+        parts = line.split(" ")
+        for i in range(len(parts)):
+            if i % 2 == 1:  # Every second element is a frequency
+                try:
+                    freq = float(parts[i])
+                    background_freqs.append(freq)
+                except ValueError:
+                    pass
+        line_index += 1
+    
+    if len(background_freqs) == 0:
+        raise Exception("Unexpected end of stream: Expected to find background frequencies")
+    
+    # Map frequencies to alphabet letters
+    for i in range(min(len(record.alphabet), len(background_freqs))):
+        letter = record.alphabet[i]
+        record.background[letter] = background_freqs[i]
+    
+    return line_index + 1
 
 
-def _read_motif_statistics(handle):
+def _read_motif_statistics(lines: List[str], start_index: int) -> Tuple[Optional[int], int, float, int]:
     """Read motif statistics (PRIVATE)."""
-    # minimal MEME motif format letter-probability matrix line:
-    #      letter-probability matrix: alength= 4 w= 19 nsites= 17 E= 4.1e-009
-    #
-    # All the "key= value" pairs after the "letter-probability matrix:" text are optional.
-    # The "alength= alphabet length" and "w= motif length" can be derived from the matrix
-    # if they are not specified, provided there is an empty line following the letter
-    # probability matrix.
-    # The "nsites= source sites" will default to 20 if it is not provided and the
-    # "E= source E-value" will default to zero.
-    for line in handle:
+    line_index = start_index
+    
+    # Find letter-probability matrix line
+    while line_index < len(lines):
+        line = lines[line_index].strip()
         if line.startswith("letter-probability matrix:"):
             break
-
-    # The "nsites= source sites" will default to 20 if it is not provided.
-    num_occurrences = (
-        int(line.split("nsites=")[1].split()[0]) if line.find("nsites=") != -1 else 20
-    )
-    # Length can be infered later if it is not provided.
-    length = int(line.split("w=")[1].split()[0]) if line.find("w=") != -1 else None
-    # E-value will default to zero if it is not provided.
-    evalue = float(line.split("E=")[1].split()[0]) if line.find("E=") != -1 else 0.0
-    return length, num_occurrences, evalue
-
-
-def _read_motif_name(handle):
-    """Read motif name (PRIVATE)."""
-    for line in handle:
-        if "sorted by position p-value" in line:
-            break
+        line_index += 1
     else:
-        raise ValueError("Unexpected end of stream: Failed to find motif name")
-    line = line.strip()
-    words = line.split()
-    name = " ".join(words[0:2])
-    return name
+        raise Exception("Expected to find 'letter-probability matrix:' line")
+    
+    line = lines[line_index]
+    
+    # Parse statistics from the line
+    # Default values
+    length = None
+    num_occurrences = 20
+    evalue = 0.0
+    
+    # Extract nsites
+    if "nsites=" in line:
+        parts = line.split("nsites=")
+        if len(parts) > 1:
+            nsites_part = parts[1].split()[0]
+            try:
+                num_occurrences = int(nsites_part)
+            except ValueError:
+                num_occurrences = 20
+    
+    # Extract length (w=)
+    if "w=" in line:
+        parts = line.split("w=")
+        if len(parts) > 1:
+            w_part = parts[1].split()[0]
+            try:
+                length = int(w_part)
+            except ValueError:
+                length = None
+    
+    # Extract E-value
+    if "E=" in line:
+        parts = line.split("E=")
+        if len(parts) > 1:
+            e_part = parts[1].split()[0]
+            try:
+                evalue = float(e_part)
+            except ValueError:
+                evalue = 0.0
+    
+    return length, num_occurrences, evalue, line_index + 1
 
 
-if __name__ == "__main__":
-    from Bio._utils import run_doctest
-
-    run_doctest()
+def _read_lpm(record: Record, lines: List[str], start_index: int, 
+             length: Optional[int], num_occurrences: int) -> Tuple[Dict[str, List[int]], int]:
+    """Read letter probability matrix (PRIVATE)."""
+    line_index = start_index
+    counts = Dict[str, List[int]]()
+    
+    # Initialize count lists
+    for letter in record.alphabet:
+        counts[letter] = List[int]()
+    
+    positions_read = 0
+    while line_index < len(lines):
+        line = lines[line_index].strip()
+        if not line:
+            # Empty line - check if we have expected length
+            if length is not None and positions_read < length:
+                line_index += 1
+                continue
+            else:
+                break
+        
+        # Try to parse as frequency line
+        parts = line.split()
+        if len(parts) != 4:
+            # Not a frequency line
+            break
+        
+        try:
+            freqs = [float(part) for part in parts]
+        except ValueError:
+            # Not all parts are numbers
+            break
+        
+        # Convert frequencies to counts and add to matrix
+        for i, letter in enumerate(record.alphabet):
+            if i < len(freqs):
+                count = round(freqs[i] * num_occurrences)
+                counts[letter].append(count)
+        
+        positions_read += 1
+        line_index += 1
+        
+        # Stop if we've read the expected length
+        if length is not None and positions_read >= length:
+            break
+    
+    return counts, line_index
