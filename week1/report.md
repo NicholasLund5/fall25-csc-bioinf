@@ -1,7 +1,3 @@
-Here’s a cleaner, slightly polished version for your README while keeping it concise and informal:
-
----
-
 ### Steps
 
 1. **Initialize repo**
