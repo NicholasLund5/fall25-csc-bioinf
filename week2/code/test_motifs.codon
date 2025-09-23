@@ -1,7 +1,37 @@
-#!/usr/bin/env codon
+"""
+Bio.motifs.matrix Test Suite - Codon Implementation
 
-# Complete test file for BioPython motifs port to Codon
-# Based on BioPython's test_motifs.py but adapted for Codon
+Comprehensive test suite for sequence motif matrix implementations ported from BioPython 
+to Codon, a high-performance Python compiler for computational biology.
+
+Codon Adaptations Made:
+- Replaced Python unittest framework with custom assertion functions
+- Used @test decorators instead of unittest.TestCase methods
+- Simplified exception handling (removed specific exception type checking)
+- Used literal tolerance values instead of 10**(-places) expressions
+- Replaced complex list comprehensions with explicit loops where needed
+- Added explicit type handling for cross-language compatibility
+- Maintained BioPython API compatibility while optimizing for Codon's static compilation
+
+Classes Tested:
+- GenericPositionMatrix: Base matrix with consensus/anticonsensus calculation, GC analysis
+- FrequencyPositionMatrix: Count matrices with normalization and pseudocount handling  
+- PositionWeightMatrix: Probability matrices with log-odds conversion
+- PositionSpecificScoringMatrix: Scoring matrices with sequence analysis and motif comparison
+
+Test Coverage:
+- Matrix operations (indexing, iteration, string representation)
+- Consensus sequence calculations (standard, anti-, degenerate)
+- Normalization strategies with various pseudocount methods
+- Log-odds conversion with custom background frequencies
+- Sequence scoring and motif matching algorithms
+- Statistical analysis (mean, std, Pearson correlation)
+- Edge cases (empty matrices, extreme values, NaN/infinity)
+- Integration testing of complete count→probability→scoring pipeline
+
+40+ test cases validate Codon-compiled motif analysis functionality for high-performance
+computational biology applications.
+"""
 
 import math
 from python import numpy as np

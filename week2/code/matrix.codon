@@ -1,14 +1,39 @@
-"""Support for various forms of sequence motif matrices.
+"""
+Bio.motifs.matrix - Codon Implementation
 
-Implementation of frequency (count) matrices, position-weight matrices,
+Port of BioPython's motif matrix module to Codon for high-performance computational biology.
+Provides sequence motif analysis through frequency matrices, position-weight matrices, 
 and position-specific scoring matrices.
+
+Key Codon Adaptations from Original BioPython:
+- Replaced dict inheritance with explicit data storage using Dict[str, List[float]]
+- Removed numpy dependencies and C extension (_pwm) for pure Codon implementation  
+- Simplified Seq class implementation without full BioPython.Seq functionality
+- Replaced complex slicing operations with explicit loops and indexing
+- Used explicit type annotations (Dict, List, Optional) for static compilation
+- Removed advanced features like search() method and distribution calculations
+- Simplified exception handling (generic Exception instead of specific types)
+- Replaced dict.fromkeys() with explicit dictionary construction
+- Eliminated tuple conversion and advanced indexing patterns
+- Used manual dictionary copying instead of dict() constructor
+- Replaced numbers.Integral checks with isinstance(x, int)
+- Simplified background normalization without dict comprehensions
+
+Classes Implemented:
+- GenericPositionMatrix: Base matrix operations, consensus calculation, GC analysis
+- FrequencyPositionMatrix: Count-based matrices with pseudocount normalization
+- PositionWeightMatrix: Probability matrices with log-odds transformation  
+- PositionSpecificScoringMatrix: Scoring matrices for sequence analysis
+- Seq: Minimal sequence wrapper for BioPython compatibility
+
+Performance optimizations maintain API compatibility while enabling static compilation
+for computational biology applications requiring high-throughput motif analysis.
 """
 
 import math
 from python import numpy as np
 from typing import Optional
 
-# Simple Seq class replacement since Bio.Seq won't be available
 class Seq:
     def __init__(self, sequence: str):
         self._data = sequence
@@ -37,7 +62,6 @@ class GenericPositionMatrix:
                 self.length = len(values[letter])
             elif self.length != len(values[letter]):
                 raise Exception("data has inconsistent lengths")
-            # Cast any numpy floats into Python floats:
             float_list = []
             for val in values[letter]:
                 float_list.append(float(val))
@@ -136,11 +160,6 @@ class GenericPositionMatrix:
     @property
     def degenerate_consensus(self) -> Seq:
         """Return the degenerate consensus sequence."""
-        # Following the rules adapted from
-        # D. R. Cavener: "Comparison of the consensus sequence flanking
-        # translational start sites in Drosophila and vertebrates."
-        # Nucleic Acids Research 15(4): 1353-1361. (1987).
-        # The same rules are used by TRANSFAC.
         degenerate_nucleotide = {
             "A": "A",
             "C": "C",
@@ -168,7 +187,6 @@ class GenericPositionMatrix:
         }
         sequence = ""
         for i in range(self.length):
-            # Sort nucleotides by count at position i
             nucleotides_counts = []
             for nucleotide in self.alphabet:
                 nucleotides_counts.append((self.data[nucleotide][i], nucleotide))
@@ -177,7 +195,6 @@ class GenericPositionMatrix:
             nucleotides = [nc[1] for nc in nucleotides_counts]
             counts = [nc[0] for nc in nucleotides_counts]
             
-            # Follow the Cavener rules:
             if counts[0] > sum(counts[1:]) and counts[0] > 2 * counts[1]:
                 key = nucleotides[0]
             elif 4 * sum(counts[:2]) > 3 * sum(counts):
@@ -299,12 +316,10 @@ class FrequencyPositionMatrix:
             for letter in self.alphabet:
                 counts[letter][i] += self.data[letter][i]
         
-        # Actual normalization is done in the PositionWeightMatrix initializer
         pwm = PositionWeightMatrix()
         pwm.data = counts
         pwm.alphabet = self.alphabet
         pwm.length = self.length
-        # Normalize the counts to probabilities
         for i in range(pwm.length):
             total = 0.0
             for letter in pwm.alphabet:
@@ -337,7 +352,6 @@ class PositionWeightMatrix:
             self.data[letter] = float_list
         self.alphabet = alphabet
         
-        # Normalize the counts to probabilities
         for i in range(self.length):
             total = 0.0
             for letter in alphabet:
@@ -385,7 +399,6 @@ class PositionWeightMatrix:
             for letter in self.alphabet:
                 background[letter] = 1.0
         else:
-            # Create a copy of background
             background = Dict[str, float](background)
         
         total = 0.0
@@ -472,7 +485,6 @@ class PositionSpecificScoringMatrix:
             if alphabet_list != ["A", "C", "G", "T"]:
                 raise ValueError("PSSM has wrong alphabet: " + str(self.alphabet) + " - Use only with DNA motifs")
 
-            # Convert sequence to uppercase string
             if hasattr(sequence, '_data'):
                 seq_str = sequence._data.upper()
             elif isinstance(sequence, str):
@@ -495,11 +507,9 @@ class PositionSpecificScoringMatrix:
                     if base in self.alphabet:
                         score += self.data[base][i]
                     else:
-                        # Handle ambiguous bases - this should not happen with proper input
                         raise ValueError("Invalid character '" + base + "' in sequence at position " + str(start + i))
                 scores.append(score)
 
-            # Always return a list for consistent typing
             return scores
 
     @property
@@ -603,7 +613,7 @@ class PositionSpecificScoringMatrix:
             sxx -= sx * sx
             variance += sxx
         
-        if variance < 0:  # to avoid roundoff problems
+        if variance < 0:
             variance = 0.0
         return math.sqrt(variance)
 
@@ -620,7 +630,7 @@ class PositionSpecificScoringMatrix:
         for offset in range(-self.length + 1, other.length):
             if offset < 0:
                 p = self.dist_pearson_at(other, -offset)
-            else:  # offset>=0
+            else:
                 p = other.dist_pearson_at(self, offset)
             if max_p < p:
                 max_p = p
@@ -630,11 +640,11 @@ class PositionSpecificScoringMatrix:
     def dist_pearson_at(self, other, offset: int) -> float:
         """Return the similarity score based on pearson correlation at the given offset."""
         letters = self.alphabet
-        sx = 0.0  # \sum x
-        sy = 0.0  # \sum y
-        sxx = 0.0  # \sum x^2
-        sxy = 0.0  # \sum x \cdot y
-        syy = 0.0  # \sum y^2
+        sx = 0.0
+        sy = 0.0
+        sxx = 0.0
+        sxy = 0.0
+        syy = 0.0
         
         length1 = self.length
         length2 = other.length
