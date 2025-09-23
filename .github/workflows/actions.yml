@@ -26,9 +26,15 @@ jobs:
         run: |
           export CODON_PYTHON=$(curl -L https://raw.githubusercontent.com/exaloop/codon/refs/heads/develop/test/python/find-python-library.py | python)
           echo "Found Python at: ${CODON_PYTHON}"
+          echo "CODON_PYTHON=${CODON_PYTHON}" >> $GITHUB_ENV
       
       - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
       - run: echo "🖥️ The workflow is now ready to test your code on the runner."
 
       - name: Week 1
         run: bash week1/evaluate.sh
+
+      - name: Week 2
+        env:
+          CODON_PYTHON: ${{ env.CODON_PYTHON }}
+        run: bash week2/evaluate.sh
