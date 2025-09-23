@@ -1,0 +1,330 @@
+#!/usr/bin/env codon
+
+# Test file for BioPython motifs port to Codon
+# Based on BioPython's test_motifs.py but adapted for Codon
+
+import math
+from python import numpy as np
+
+# Import our motif modules (assuming they're in the same directory)
+from matrix import GenericPositionMatrix, FrequencyPositionMatrix, PositionWeightMatrix, PositionSpecificScoringMatrix
+
+# Helper functions for testing (replacing unittest assertions)
+def assertEqual(a, b, msg=""):
+    if msg:
+        assert a == b, f"{msg}: {a} != {b}"
+    else:
+        assert a == b, f"Expected {a} == {b}"
+
+def assertAlmostEqual(a, b, places=7, msg=""):
+    tolerance = 10**(-places)
+    diff = abs(a - b)
+    if msg:
+        assert diff < tolerance, f"{msg}: |{a} - {b}| = {diff} >= {tolerance}"
+    else:
+        assert diff < tolerance, f"|{a} - {b}| = {diff} >= {tolerance}"
+
+def assertRaises(exception_type, func, *args, **kwargs):
+    """Check that calling func(*args, **kwargs) raises exception_type"""
+    try:
+        func(*args, **kwargs)
+        assert False, f"Expected {exception_type.__name__} to be raised"
+    except exception_type:
+        pass  # This is what we expected
+
+def assertTrue(condition, msg=""):
+    if msg:
+        assert condition, msg
+    else:
+        assert condition
+
+def assertFalse(condition, msg=""):
+    if msg:
+        assert not condition, msg
+    else:
+        assert not condition
+
+# Test data
+TEST_ALPHABET = "ACGT"
+TEST_VALUES = {
+    "A": [0.7, 0.0, 0.0, 0.9, 0.9, 0.9, 0.1, 0.1, 0.1, 0.1, 0.3, 0.0],
+    "C": [0.2, 0.9, 0.0, 0.1, 0.0, 0.0, 0.4, 0.1, 0.8, 0.2, 0.0, 0.6],
+    "G": [0.1, 0.1, 1.0, 0.0, 0.1, 0.0, 0.5, 0.8, 0.1, 0.7, 0.7, 0.4],
+    "T": [0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+}
+
+@test
+def test_generic_position_matrix_init():
+    """Test GenericPositionMatrix initialization"""
+    gpm = GenericPositionMatrix(TEST_ALPHABET, TEST_VALUES)
+    assertEqual(gpm.alphabet, TEST_ALPHABET)
+    assertEqual(gpm.length, 12)
+    
+    # Test values are properly stored and converted to float
+    for letter in TEST_ALPHABET:
+        assertEqual(len(gpm[letter]), 12)
+        for i in range(12):
+            assertAlmostEqual(gpm[letter][i], TEST_VALUES[letter][i])
+
+@test
+def test_generic_position_matrix_inconsistent_lengths():
+    """Test that inconsistent lengths raise an exception"""
+    bad_values = {
+        "A": [0.7, 0.0, 0.0],
+        "C": [0.2, 0.9],  # Different length
+        "G": [0.1, 0.1, 1.0],
+        "T": [0.0, 0.0, 0.0]
+    }
+    
+    def create_bad_matrix():
+        GenericPositionMatrix(TEST_ALPHABET, bad_values)
+    
+    assertRaises(Exception, create_bad_matrix)
+
+@test
+def test_generic_position_matrix_str():
+    """Test string representation"""
+    gpm = GenericPositionMatrix(TEST_ALPHABET, TEST_VALUES)
+    str_repr = str(gpm)
+    
+    # Check that all letters are in the string representation
+    for letter in TEST_ALPHABET:
+        assertTrue(letter in str_repr)
+    
+    # Check that position indices are included
+    assertTrue("0" in str_repr)
+    assertTrue("11" in str_repr)
+
+@test
+def test_generic_position_matrix_getitem():
+    """Test indexing operations"""
+    gpm = GenericPositionMatrix(TEST_ALPHABET, TEST_VALUES)
+    
+    # Test single letter access
+    assertEqual(len(gpm["A"]), 12)
+    assertAlmostEqual(gpm["A"][0], 0.7)
+    
+    # Test position access
+    assertAlmostEqual(gpm["A"][5], 0.9)
+    
+    # Test tuple indexing (letter, position)
+    assertAlmostEqual(gpm["A", 0], 0.7)
+    assertAlmostEqual(gpm["C", 1], 0.9)
+
+@test
+def test_generic_position_matrix_consensus():
+    """Test consensus sequence calculation"""
+    gpm = GenericPositionMatrix(TEST_ALPHABET, TEST_VALUES)
+    consensus = gpm.consensus
+    
+    # Based on TEST_VALUES, expected consensus should be:
+    # Position 0: A (0.7) > C (0.2) > G (0.1) > T (0.0) → A
+    # Position 1: C (0.9) > G (0.1) > A (0.0) = T (0.0) → C
+    # Position 2: G (1.0) > others (0.0) → G
+    # etc.
+    expected = "ACGAAAAGGGG"  # First 11 positions based on max values
+    assertEqual(str(consensus)[:11], expected)
+
+@test
+def test_generic_position_matrix_anticonsensus():
+    """Test anticonsensus sequence calculation"""
+    gpm = GenericPositionMatrix(TEST_ALPHABET, TEST_VALUES)
+    anticonsensus = gpm.anticonsensus
+    
+    # Anticonsensus should pick minimum values at each position
+    # Position 0: T (0.0) is minimum → T
+    # Position 1: A (0.0) = T (0.0), but we'll get the first one found
+    expected_start = "T"  # At least first position should be T
+    assertEqual(str(anticonsensus)[0], expected_start)
+
+@test
+def test_generic_position_matrix_gc_content():
+    """Test GC content calculation"""
+    gpm = GenericPositionMatrix(TEST_ALPHABET, TEST_VALUES)
+    gc_content = gpm.gc_content
+    
+    # Calculate expected GC content manually
+    total_gc = sum(sum(TEST_VALUES["G"]) + sum(TEST_VALUES["C"]))
+    total_all = sum(sum(TEST_VALUES[letter]) for letter in TEST_ALPHABET)
+    expected_gc = total_gc / total_all
+    
+    assertAlmostEqual(gc_content, expected_gc)
+
+@test
+def test_frequency_position_matrix():
+    """Test FrequencyPositionMatrix functionality"""
+    # Use integer counts for frequency matrix
+    counts = {
+        "A": [7, 0, 0, 9, 9, 9, 1, 1, 1, 1, 3, 0],
+        "C": [2, 9, 0, 1, 0, 0, 4, 1, 8, 2, 0, 6],
+        "G": [1, 1, 10, 0, 1, 0, 5, 8, 1, 7, 7, 4],
+        "T": [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
+    }
+    
+    fpm = FrequencyPositionMatrix(TEST_ALPHABET, counts)
+    assertEqual(fpm.alphabet, TEST_ALPHABET)
+    assertEqual(fpm.length, 12)
+
+@test
+def test_frequency_position_matrix_normalize():
+    """Test normalization to position weight matrix"""
+    counts = {
+        "A": [7, 0, 0, 9],
+        "C": [2, 9, 0, 1],
+        "G": [1, 1, 10, 0],
+        "T": [0, 0, 0, 0]
+    }
+    
+    fpm = FrequencyPositionMatrix(TEST_ALPHABET, counts)
+    pwm = fpm.normalize()
+    
+    # Check that it returns a PositionWeightMatrix
+    assertTrue(isinstance(pwm, PositionWeightMatrix))
+    
+    # Check that probabilities sum to 1 at each position
+    for i in range(4):
+        total = sum(pwm[letter][i] for letter in TEST_ALPHABET)
+        assertAlmostEqual(total, 1.0)
+    
+    # Check specific probability calculation
+    # Position 0: A=7, C=2, G=1, T=0, total=10
+    assertAlmostEqual(pwm["A"][0], 0.7)
+    assertAlmostEqual(pwm["C"][0], 0.2)
+    assertAlmostEqual(pwm["G"][0], 0.1)
+    assertAlmostEqual(pwm["T"][0], 0.0)
+
+@test
+def test_frequency_position_matrix_normalize_with_pseudocounts():
+    """Test normalization with pseudocounts"""
+    counts = {
+        "A": [7, 0, 0, 9],
+        "C": [2, 9, 0, 1],
+        "G": [1, 1, 10, 0],
+        "T": [0, 0, 0, 0]
+    }
+    
+    fpm = FrequencyPositionMatrix(TEST_ALPHABET, counts)
+    pwm = fpm.normalize(pseudocounts=1.0)
+    
+    # With pseudocounts=1.0, each count is increased by 1
+    # Position 0: A=8, C=3, G=2, T=1, total=14
+    assertAlmostEqual(pwm["A"][0], 8.0/14.0)
+    assertAlmostEqual(pwm["C"][0], 3.0/14.0)
+    assertAlmostEqual(pwm["G"][0], 2.0/14.0)
+    assertAlmostEqual(pwm["T"][0], 1.0/14.0)
+
+@test
+def test_position_weight_matrix_log_odds():
+    """Test log odds calculation for PSSM"""
+    counts = {
+        "A": [8, 1, 1, 8],
+        "C": [2, 8, 1, 1],
+        "G": [1, 1, 8, 1],
+        "T": [1, 1, 1, 1]
+    }
+    
+    pwm = PositionWeightMatrix(TEST_ALPHABET, counts)
+    pssm = pwm.log_odds()
+    
+    # Check that it returns a PositionSpecificScoringMatrix
+    assertTrue(isinstance(pssm, PositionSpecificScoringMatrix))
+    
+    # With uniform background (0.25 each), log odds should be log2(prob/0.25)
+    # Position 0: A prob = 8/12 = 2/3, log2((2/3)/0.25) = log2(8/3)
+    expected_a0 = math.log2((8.0/12.0) / 0.25)
+    assertAlmostEqual(pssm["A"][0], expected_a0, places=5)
+
+@test
+def test_position_weight_matrix_log_odds_custom_background():
+    """Test log odds with custom background"""
+    counts = {
+        "A": [8, 1],
+        "C": [2, 8],
+        "G": [1, 1],
+        "T": [1, 2]
+    }
+    
+    background = {"A": 0.3, "C": 0.2, "G": 0.2, "T": 0.3}
+    
+    pwm = PositionWeightMatrix(TEST_ALPHABET, counts)
+    pssm = pwm.log_odds(background)
+    
+    # Position 0: A prob = 8/12 = 2/3, log2((2/3)/0.3)
+    expected_a0 = math.log2((8.0/12.0) / 0.3)
+    assertAlmostEqual(pssm["A"][0], expected_a0, places=5)
+
+@test
+def test_position_specific_scoring_matrix_max_min():
+    """Test max and min score calculations"""
+    values = {
+        "A": [2.0, -1.0, -2.0, 3.0],
+        "C": [-1.0, 2.0, -1.0, -2.0],
+        "G": [-2.0, -2.0, 3.0, -1.0],
+        "T": [-3.0, -3.0, -3.0, 0.0]
+    }
+    
+    pssm = PositionSpecificScoringMatrix(TEST_ALPHABET, values)
+    
+    # Max score: take maximum at each position
+    # Pos 0: max(2,-1,-2,-3) = 2
+    # Pos 1: max(-1,2,-2,-3) = 2  
+    # Pos 2: max(-2,-1,3,-3) = 3
+    # Pos 3: max(3,-2,-1,0) = 3
+    expected_max = 2.0 + 2.0 + 3.0 + 3.0
+    assertAlmostEqual(pssm.max, expected_max)
+    
+    # Min score: take minimum at each position
+    expected_min = -3.0 + (-3.0) + (-3.0) + (-2.0)
+    assertAlmostEqual(pssm.min, expected_min)
+
+@test
+def test_reverse_complement():
+    """Test reverse complement calculation"""
+    counts = {
+        "A": [8, 1, 2, 0],
+        "C": [1, 2, 1, 1],
+        "G": [1, 8, 7, 2],
+        "T": [0, 1, 0, 9]
+    }
+    
+    fpm = FrequencyPositionMatrix(TEST_ALPHABET, counts)
+    rc_fpm = fpm.reverse_complement()
+    
+    # Reverse complement should swap A<->T, C<->G and reverse positions
+    # Original: A=[8,1,2,0], T=[0,1,0,9]
+    # RC: A should be reverse of original T = [9,0,1,0]
+    assertEqual(rc_fpm["A"], [9, 0, 1, 0])
+    assertEqual(rc_fpm["T"], [0, 2, 1, 8])
+
+# Test execution functions
+def run_all_tests():
+    """Run all test functions"""
+    print("Running GenericPositionMatrix tests...")
+    test_generic_position_matrix_init()
+    test_generic_position_matrix_inconsistent_lengths()
+    test_generic_position_matrix_str()
+    test_generic_position_matrix_getitem()
+    test_generic_position_matrix_consensus()
+    test_generic_position_matrix_anticonsensus()
+    test_generic_position_matrix_gc_content()
+    
+    print("Running FrequencyPositionMatrix tests...")
+    test_frequency_position_matrix()
+    test_frequency_position_matrix_normalize()
+    test_frequency_position_matrix_normalize_with_pseudocounts()
+    
+    print("Running PositionWeightMatrix tests...")
+    test_position_weight_matrix_log_odds()
+    test_position_weight_matrix_log_odds_custom_background()
+    
+    print("Running PositionSpecificScoringMatrix tests...")
+    test_position_specific_scoring_matrix_max_min()
+    
+    print("Running reverse complement tests...")
+    test_reverse_complement()
+    
+    print("All tests passed!")
+
+# Execute all tests when this file is run
+if __name__ == "__main__":
+    run_all_tests()

@@ -10,7 +10,7 @@ echo "======================================="
 
 # Compile and run tests
 echo "Compiling motifs tests..."
-codon build -release week2/tests/test_motifs.codon -o test_motifs_exe
+codon build -release week2/code/test_motifs.codon -o test_motifs_exe
 
 echo "Running motifs tests..."
 export CODON_PYTHON="${CODON_PYTHON}"
