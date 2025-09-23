@@ -6,6 +6,7 @@ and position-specific scoring matrices.
 
 import math
 from python import numpy as np
+from typing import Optional
 
 # Simple Seq class replacement since Bio.Seq won't be available
 class Seq:
@@ -17,6 +18,12 @@ class Seq:
     
     def __repr__(self) -> str:
         return "Seq('" + self._data + "')"
+    
+    def __len__(self) -> int:
+        return len(self._data)
+    
+    def __getitem__(self, index: int) -> str:
+        return self._data[index]
 
 class GenericPositionMatrix:
     """Base class for the support of position matrix operations."""
@@ -187,7 +194,7 @@ class GenericPositionMatrix:
             sequence += nucleotide
         return Seq(sequence)
 
-    def calculate_consensus(self, substitution_matrix=None, plurality=None, identity=0, setcase=None) -> str:
+    def calculate_consensus(self, substitution_matrix=None, plurality=None, identity=0.0, setcase=None) -> str:
         alphabet = self.alphabet
         alphabet_set = set(alphabet)
         if alphabet_set.union(set("ACGTUN-")) == set("ACGTUN-"):
@@ -200,8 +207,8 @@ class GenericPositionMatrix:
                 raise ValueError("plurality must be None if substitution_matrix is None")
             sequence = ""
             for i in range(self.length):
-                maximum = 0
-                total = 0
+                maximum = 0.0
+                total = 0.0
                 consensus_letter = ""
                 for letter in alphabet:
                     count = self.data[letter][i]
@@ -213,7 +220,7 @@ class GenericPositionMatrix:
                     consensus_letter = undefined
                 else:
                     if setcase is None:
-                        setcase_threshold = total / 2
+                        setcase_threshold = total / 2.0
                     else:
                         setcase_threshold = setcase * total
                     if maximum <= setcase_threshold:
@@ -458,43 +465,41 @@ class PositionSpecificScoringMatrix:
         else:
             raise KeyError("Cannot understand key " + str(key))
 
-    def calculate(self, sequence):
-        """Calculate PSSM scores for a sequence."""
-        alphabet_list = list(self.alphabet)
-        alphabet_list.sort()
-        if alphabet_list != ["A", "C", "G", "T"]:
-            raise ValueError("PSSM has wrong alphabet: " + str(self.alphabet) + " - Use only with DNA motifs")
+    def calculate(self, sequence) -> List[float]:
+            """Calculate PSSM scores for a sequence."""
+            alphabet_list = list(self.alphabet)
+            alphabet_list.sort()
+            if alphabet_list != ["A", "C", "G", "T"]:
+                raise ValueError("PSSM has wrong alphabet: " + str(self.alphabet) + " - Use only with DNA motifs")
 
-        # Convert sequence to uppercase string
-        if isinstance(sequence, str):
-            sequence = sequence.upper()
-        else:
-            sequence = str(sequence).upper()
+            # Convert sequence to uppercase string
+            if hasattr(sequence, '_data'):
+                seq_str = sequence._data.upper()
+            elif isinstance(sequence, str):
+                seq_str = sequence.upper()
+            else:
+                seq_str = str(sequence).upper()
 
-        n = len(sequence)
-        m = self.length
-        
-        if n < m:
-            return []
-        
-        scores = []
-        for start in range(n - m + 1):
-            score = 0.0
-            valid = True
-            for i in range(m):
-                base = sequence[start + i]
-                if base in self.alphabet:
-                    score += self.data[base][i]
-                else:
-                    # Handle ambiguous bases as NaN (skip for now)
-                    score = math.nan
-                    valid = False
-                    break
-            scores.append(score)
+            n = len(seq_str)
+            m = self.length
+            
+            if n < m:
+                return []
+            
+            scores = []
+            for start in range(n - m + 1):
+                score = 0.0
+                valid = True
+                for i in range(m):
+                    base = seq_str[start + i]
+                    if base in self.alphabet:
+                        score += self.data[base][i]
+                    else:
+                        # Handle ambiguous bases - this should not happen with proper input
+                        raise ValueError("Invalid character '" + base + "' in sequence at position " + str(start + i))
+                scores.append(score)
 
-        if len(scores) == 1:
-            return scores[0]
-        else:
+            # Always return a list for consistent typing
             return scores
 
     @property
@@ -536,7 +541,7 @@ class PositionSpecificScoringMatrix:
         """Compute the GC-ratio."""
         raise Exception("Cannot compute the %GC composition of a PSSM")
 
-    def mean(self, background=None) -> float:
+    def mean(self, background: Optional[Dict[str, float]] = None) -> float:
         """Return expected value of the score of a motif."""
         if background is None:
             background = Dict[str, float]()
@@ -565,7 +570,7 @@ class PositionSpecificScoringMatrix:
                 sx += p * logodds
         return sx
 
-    def std(self, background=None) -> float:
+    def std(self, background: Optional[Dict[str, float]] = None) -> float:
         """Return standard deviation of the score of a motif."""
         if background is None:
             background = Dict[str, float]()
