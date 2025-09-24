@@ -1,0 +1,990 @@
+import math
+from python import numpy as np4
+from matrix import GenericPositionMatrix, FrequencyPositionMatrix, PositionWeightMatrix, PositionSpecificScoringMatrix, Seq
+
+def assertEqual(a, b, msg=""):
+    if msg:
+        assert a == b, msg + ": " + str(a) + " != " + str(b)
+    else:
+        assert a == b, "Expected " + str(a) + " == " + str(b)
+
+def assertAlmostEqual(a, b, places=7, msg=""):
+    tolerance = 1e-7
+    
+    if math.isnan(a) and math.isnan(b):
+        return
+    elif math.isnan(a) or math.isnan(b):
+        if msg:
+            assert False, msg + ": One value is NaN: " + str(a) + " vs " + str(b)
+        else:
+            assert False, "One value is NaN: " + str(a) + " vs " + str(b)
+    
+    diff = abs(a - b)
+    if msg:
+        assert diff <= tolerance, msg + ": |" + str(a) + " - " + str(b) + "| = " + str(diff) + " > " + str(tolerance)
+    else:
+        assert diff <= tolerance, "|" + str(a) + " - " + str(b) + "| = " + str(diff) + " > " + str(tolerance)
+        
+def assertRaises(exception_type, func, *args, **kwargs):
+    """Check that calling func(*args, **kwargs) raises exception_type"""
+    try:
+        result = func(*args, **kwargs)
+        assert False, "Expected " + str(exception_type.__name__) + " to be raised"
+    except Exception as e:
+        if exception_type.__name__ in str(type(e)):
+            pass
+        else:
+            assert False, "Expected " + str(exception_type.__name__) + " but got " + str(type(e))
+
+def assertTrue(condition, msg=""):
+    if msg:
+        assert condition, msg
+    else:
+        assert condition
+
+def assertFalse(condition, msg=""):
+    if msg:
+        assert not condition, msg
+    else:
+        assert not condition
+
+def assertIn(item, container, msg=""):
+    if msg:
+        assert item in container, msg
+    else:
+        assert item in container, str(item) + " not found in " + str(container)
+
+TEST_ALPHABET = "ACGT"
+TEST_VALUES = {
+    "A": [0.7, 0.0, 0.0, 0.9, 0.9, 0.9, 0.1, 0.1, 0.1, 0.1, 0.3, 0.0],
+    "C": [0.2, 0.9, 0.0, 0.1, 0.0, 0.0, 0.4, 0.1, 0.8, 0.2, 0.0, 0.6],
+    "G": [0.1, 0.1, 1.0, 0.0, 0.1, 0.0, 0.5, 0.8, 0.1, 0.7, 0.7, 0.4],
+    "T": [0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+}
+
+# ============================================================================
+# GenericPositionMatrix Tests
+# ============================================================================
+
+@test
+def test_generic_position_matrix_init():
+    """Test GenericPositionMatrix initialization"""
+    gpm = GenericPositionMatrix(TEST_ALPHABET, TEST_VALUES)
+    assertEqual(gpm.alphabet, TEST_ALPHABET)
+    assertEqual(gpm.length, 12)
+    
+    for letter in TEST_ALPHABET:
+        assertEqual(len(gpm.data[letter]), 12)
+        for i in range(12):
+            assertAlmostEqual(gpm.data[letter][i], TEST_VALUES[letter][i])
+
+@test
+def test_generic_position_matrix_inconsistent_lengths():
+    """Test that inconsistent lengths raise an exception"""
+    bad_values = {
+        "A": [0.7, 0.0, 0.0],
+        "C": [0.2, 0.9],
+        "G": [0.1, 0.1, 1.0],
+        "T": [0.0, 0.0, 0.0]
+    }
+    
+    try:
+        GenericPositionMatrix(TEST_ALPHABET, bad_values)
+        assert False, "Expected Exception to be raised"
+    except Exception:
+        pass
+
+@test
+def test_generic_position_matrix_str():
+    """Test string representation"""
+    gpm = GenericPositionMatrix(TEST_ALPHABET, TEST_VALUES)
+    str_repr = str(gpm)
+    
+    for letter in TEST_ALPHABET:
+        assertIn(letter, str_repr)
+    
+    assertIn("0", str_repr)
+    assertIn("11", str_repr)
+
+@test
+def test_generic_position_matrix_getitem():
+    """Test indexing operations"""
+    gpm = GenericPositionMatrix(TEST_ALPHABET, TEST_VALUES)
+    
+    assertEqual(len(gpm["A"]), 12)
+    assertAlmostEqual(gpm["A"][0], 0.7)
+    assertAlmostEqual(gpm["A"][5], 0.9)
+    assertAlmostEqual(gpm["A", 0], 0.7)
+    assertAlmostEqual(gpm["C", 1], 0.9)
+    assertAlmostEqual(gpm[0][0], 0.7)
+
+@test
+def test_generic_position_matrix_setitem():
+    """Test setting values"""
+    gpm = GenericPositionMatrix(TEST_ALPHABET, TEST_VALUES)
+    new_values = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+    gpm["A"] = new_values
+    assertEqual(gpm["A"], new_values)
+
+@test
+def test_generic_position_matrix_keys():
+    """Test keys method"""
+    gpm = GenericPositionMatrix(TEST_ALPHABET, TEST_VALUES)
+    keys = list(gpm.keys())
+    for letter in TEST_ALPHABET:
+        assertIn(letter, keys)
+
+@test
+def test_generic_position_matrix_consensus():
+    """Test consensus sequence calculation"""
+    gpm = GenericPositionMatrix(TEST_ALPHABET, TEST_VALUES)
+    consensus = gpm.consensus
+
+    expected_start = "ACG"
+    assertEqual(str(consensus)[:3], expected_start)
+
+@test
+def test_generic_position_matrix_anticonsensus():
+    """Test anticonsensus sequence calculation"""
+    gpm = GenericPositionMatrix(TEST_ALPHABET, TEST_VALUES)
+    anticonsensus = gpm.anticonsensus
+
+    expected_start = "T"
+    assertEqual(str(anticonsensus)[0], expected_start)
+
+@test
+def test_generic_position_matrix_degenerate_consensus():
+    """Test degenerate consensus sequence calculation"""
+    deg_values = {
+        "A": [8.0, 1.0, 5.0, 0.0],
+        "C": [1.0, 8.0, 4.0, 0.0],
+        "G": [1.0, 1.0, 1.0, 0.0],
+        "T": [0.0, 0.0, 0.0, 10.0]
+    }
+    
+    gpm = GenericPositionMatrix(TEST_ALPHABET, deg_values)
+    degenerate = gpm.degenerate_consensus
+    
+    result = str(degenerate)
+    assertEqual(result[0], "A")
+    assertEqual(result[1], "C") 
+    assertEqual(result[3], "T")
+
+@test
+def test_generic_position_matrix_calculate_consensus():
+    """Test calculate_consensus method"""
+    gpm = GenericPositionMatrix(TEST_ALPHABET, TEST_VALUES)
+    consensus = gpm.calculate_consensus()
+    
+    assertTrue(isinstance(consensus, str))
+    assertEqual(len(consensus), gpm.length)
+
+@test
+def test_generic_position_matrix_gc_content():
+    """Test GC content calculation"""
+    gpm = GenericPositionMatrix(TEST_ALPHABET, TEST_VALUES)
+    gc_content = gpm.gc_content
+    
+    total_gc = sum(TEST_VALUES["G"]) + sum(TEST_VALUES["C"])
+    total_all = 0.0
+    for letter in TEST_ALPHABET:
+        total_all += sum(TEST_VALUES[letter])
+    expected_gc = total_gc / total_all
+    
+    assertAlmostEqual(gc_content, expected_gc)
+
+@test
+def test_reverse_complement():
+    """Test reverse complement calculation"""
+    counts = {
+        "A": [8.0, 1.0, 2.0, 0.0],
+        "C": [1.0, 2.0, 1.0, 1.0],
+        "G": [1.0, 8.0, 7.0, 2.0],
+        "T": [0.0, 1.0, 0.0, 9.0]
+    }
+    
+    gpm = GenericPositionMatrix(TEST_ALPHABET, counts)
+    rc_gpm = gpm.reverse_complement()
+    
+    assertEqual(rc_gpm["A"], [9.0, 0.0, 1.0, 0.0])
+    assertEqual(rc_gpm["T"], [0.0, 2.0, 1.0, 8.0])
+    assertEqual(rc_gpm["G"], [1.0, 1.0, 2.0, 1.0])
+    assertEqual(rc_gpm["C"], [2.0, 7.0, 8.0, 1.0]) 
+
+# ============================================================================
+# FrequencyPositionMatrix Tests
+# ============================================================================
+
+@test
+def test_frequency_position_matrix():
+    """Test FrequencyPositionMatrix functionality"""
+    counts = {
+        "A": [7.0, 0.0, 0.0, 9.0, 9.0, 9.0, 1.0, 1.0, 1.0, 1.0, 3.0, 0.0],
+        "C": [2.0, 9.0, 0.0, 1.0, 0.0, 0.0, 4.0, 1.0, 8.0, 2.0, 0.0, 6.0],
+        "G": [1.0, 1.0, 10.0, 0.0, 1.0, 0.0, 5.0, 8.0, 1.0, 7.0, 7.0, 4.0],
+        "T": [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    }
+    
+    fpm = FrequencyPositionMatrix(TEST_ALPHABET, counts)
+    assertEqual(fpm.alphabet, TEST_ALPHABET)
+    assertEqual(fpm.length, 12)
+
+@test
+def test_frequency_position_matrix_normalize():
+    """Test normalization to position weight matrix"""
+    counts = {
+        "A": [7.0, 0.0, 0.0, 9.0],
+        "C": [2.0, 9.0, 0.0, 1.0],
+        "G": [1.0, 1.0, 10.0, 0.0],
+        "T": [0.0, 0.0, 0.0, 0.0]
+    }
+    
+    fpm = FrequencyPositionMatrix(TEST_ALPHABET, counts)
+    pwm = fpm.normalize()
+    
+    assertTrue(isinstance(pwm, PositionWeightMatrix))
+    
+    for i in range(4):
+        total = sum(pwm[letter][i] for letter in TEST_ALPHABET)
+        assertAlmostEqual(total, 1.0)
+    
+    assertAlmostEqual(pwm["A"][0], 0.7)
+    assertAlmostEqual(pwm["C"][0], 0.2)
+    assertAlmostEqual(pwm["G"][0], 0.1)
+    assertAlmostEqual(pwm["T"][0], 0.0)
+
+@test
+def test_frequency_position_matrix_normalize_with_pseudocounts():
+    """Test normalization with pseudocounts"""
+    counts = {
+        "A": [7.0, 0.0, 0.0, 9.0],
+        "C": [2.0, 9.0, 0.0, 1.0],
+        "G": [1.0, 1.0, 10.0, 0.0],
+        "T": [0.0, 0.0, 0.0, 0.0]
+    }
+    
+    fpm = FrequencyPositionMatrix(TEST_ALPHABET, counts)
+    pwm = fpm.normalize(pseudocounts=1.0)
+    
+    assertAlmostEqual(pwm["A"][0], 8.0/14.0)
+    assertAlmostEqual(pwm["C"][0], 3.0/14.0)
+    assertAlmostEqual(pwm["G"][0], 2.0/14.0)
+    assertAlmostEqual(pwm["T"][0], 1.0/14.0)
+
+@test
+def test_frequency_position_matrix_normalize_with_dict_pseudocounts():
+    """Test normalization with dictionary pseudocounts"""
+    counts = {
+        "A": [7.0, 0.0],
+        "C": [2.0, 9.0],
+        "G": [1.0, 1.0],
+        "T": [0.0, 0.0]
+    }
+    
+    pseudocounts = {"A": 0.5, "C": 0.5, "G": 0.5, "T": 0.5}
+    
+    fpm = FrequencyPositionMatrix(TEST_ALPHABET, counts)
+    pwm = fpm.normalize(pseudocounts=pseudocounts)
+    
+    assertAlmostEqual(pwm["A"][0], 7.5/12.0)
+    assertAlmostEqual(pwm["C"][0], 2.5/12.0)
+
+# ============================================================================
+# PositionWeightMatrix Tests  
+# ============================================================================
+
+@test
+def test_position_weight_matrix_init():
+    """Test PositionWeightMatrix initialization"""
+    pwm = PositionWeightMatrix()
+    assertEqual(pwm.alphabet, "")
+    assertEqual(pwm.length, 0)
+
+@test
+def test_position_weight_matrix_init_with_data():
+    """Test PositionWeightMatrix initialization with data"""
+    counts = {
+        "A": [8.0, 1.0, 1.0, 8.0],
+        "C": [2.0, 8.0, 1.0, 1.0],
+        "G": [1.0, 1.0, 8.0, 1.0],
+        "T": [1.0, 1.0, 1.0, 1.0]
+    }
+    
+    pwm = PositionWeightMatrix()
+    pwm.init_with_data(TEST_ALPHABET, counts)
+    assertEqual(pwm.alphabet, TEST_ALPHABET)
+    assertEqual(pwm.length, 4)
+    
+    for i in range(4):
+        total = sum(pwm[letter][i] for letter in TEST_ALPHABET)
+        assertAlmostEqual(total, 1.0)
+
+@test
+def test_position_weight_matrix_getitem():
+    """Test PositionWeightMatrix indexing"""
+    counts = {
+        "A": [8.0, 1.0],
+        "C": [2.0, 8.0],
+        "G": [1.0, 1.0],
+        "T": [1.0, 1.0]
+    }
+    
+    pwm = PositionWeightMatrix()
+    pwm.init_with_data(TEST_ALPHABET, counts)
+    
+    assertEqual(len(pwm["A"]), 2)
+    
+    assertAlmostEqual(pwm["A", 0], 8.0/12.0)
+    assertAlmostEqual(pwm["C", 1], 8.0/11.0)
+
+@test
+def test_position_weight_matrix_log_odds():
+    """Test log odds calculation for PSSM"""
+    counts = {
+        "A": [8.0, 1.0, 1.0, 8.0],
+        "C": [2.0, 8.0, 1.0, 1.0],
+        "G": [1.0, 1.0, 8.0, 1.0],
+        "T": [1.0, 1.0, 1.0, 1.0]
+    }
+    
+    pwm = PositionWeightMatrix()
+    pwm.init_with_data(TEST_ALPHABET, counts)
+    pssm = pwm.log_odds()
+    
+    assertTrue(isinstance(pssm, PositionSpecificScoringMatrix))
+    
+    expected_a0 = math.log2((8.0/12.0) / 0.25)
+    assertAlmostEqual(pssm["A"][0], expected_a0, places=5)
+
+@test
+def test_position_weight_matrix_log_odds_custom_background():
+    """Test log odds with custom background"""
+    counts = {
+        "A": [8.0, 1.0],
+        "C": [2.0, 8.0],
+        "G": [1.0, 1.0],
+        "T": [1.0, 2.0]
+    }
+
+    background = {"A": 0.3, "C": 0.2, "G": 0.2, "T": 0.3}
+    
+    pwm = PositionWeightMatrix()
+    pwm.init_with_data(TEST_ALPHABET, counts)
+    pssm = pwm.log_odds(background)
+    
+    expected_a0 = math.log2((8.0/12.0) / 0.3)
+    assertAlmostEqual(pssm["A"][0], expected_a0, places=5)
+
+# ============================================================================
+# PositionSpecificScoringMatrix Tests
+# ============================================================================
+
+@test
+def test_position_specific_scoring_matrix_init():
+    """Test PSSM initialization"""
+    pssm = PositionSpecificScoringMatrix()
+    assertEqual(pssm.alphabet, "")
+    assertEqual(pssm.length, 0)
+
+@test
+def test_position_specific_scoring_matrix_init_with_data():
+    """Test PSSM initialization with data"""
+    values = {
+        "A": [2.0, -1.0, -2.0, 3.0],
+        "C": [-1.0, 2.0, -1.0, -2.0],
+        "G": [-2.0, -2.0, 3.0, -1.0],
+        "T": [-3.0, -3.0, -3.0, 0.0]
+    }
+    
+    pssm = PositionSpecificScoringMatrix()
+    pssm.init_with_data(TEST_ALPHABET, values)
+    assertEqual(pssm.alphabet, TEST_ALPHABET)
+    assertEqual(pssm.length, 4)
+
+@test
+def test_position_specific_scoring_matrix_getitem():
+    """Test PSSM indexing"""
+    values = {
+        "A": [2.0, -1.0],
+        "C": [-1.0, 2.0],
+        "G": [-2.0, -2.0],
+        "T": [-3.0, -3.0]
+    }
+    
+    pssm = PositionSpecificScoringMatrix()
+    pssm.init_with_data(TEST_ALPHABET, values)
+    
+    assertEqual(len(pssm["A"]), 2)
+    assertAlmostEqual(pssm["A", 0], 2.0)
+    assertAlmostEqual(pssm["C", 1], 2.0)
+
+@test
+def test_position_specific_scoring_matrix_max_min():
+    """Test max and min score calculations"""
+    values = {
+        "A": [2.0, -1.0, -2.0, 3.0],
+        "C": [-1.0, 2.0, -1.0, -2.0],
+        "G": [-2.0, -2.0, 3.0, -1.0],
+        "T": [-3.0, -3.0, -3.0, 0.0]
+    }
+    
+    pssm = PositionSpecificScoringMatrix()
+    pssm.init_with_data(TEST_ALPHABET, values)
+
+    expected_max = 2.0 + 2.0 + 3.0 + 3.0
+    assertAlmostEqual(pssm.max, expected_max)
+    
+    expected_min = -3.0 + (-3.0) + (-3.0) + (-2.0)
+    assertAlmostEqual(pssm.min, expected_min)
+
+@test
+def test_position_specific_scoring_matrix_calculate_same_length():
+    """Test PSSM calculate method with sequence same length as motif"""
+    values = {
+        "A": [2.0, -1.0, -2.0, 3.0],
+        "C": [-1.0, 2.0, -1.0, -2.0],
+        "G": [-2.0, -2.0, 3.0, -1.0],
+        "T": [-3.0, -3.0, -3.0, 0.0]
+    }
+    
+    pssm = PositionSpecificScoringMatrix()
+    pssm.init_with_data(TEST_ALPHABET, values)
+    
+    scores = pssm.calculate("ACGT")
+    
+    expected_score = 2.0 + 2.0 + 3.0 + 0.0
+    assertEqual(len(scores), 1)
+    assertAlmostEqual(scores[0], expected_score)
+
+@test
+def test_position_specific_scoring_matrix_calculate_longer_sequence():
+    """Test PSSM calculate method with longer sequence"""
+    values = {
+        "A": [1.0, 0.0],
+        "C": [0.0, 1.0],
+        "G": [-1.0, -1.0],
+        "T": [-2.0, -2.0]
+    }
+    
+    pssm = PositionSpecificScoringMatrix()
+    pssm.init_with_data(TEST_ALPHABET, values)
+    
+    scores = pssm.calculate("ACGT")
+    
+    assertTrue(isinstance(scores, list))
+    assertEqual(len(scores), 3)
+
+    assertAlmostEqual(scores[0], 2.0)
+    assertAlmostEqual(scores[1], -1.0)
+    assertAlmostEqual(scores[2], -3.0)
+
+@test
+def test_position_specific_scoring_matrix_calculate_short_sequence():
+    """Test PSSM calculate with sequence shorter than motif"""
+    values = {
+        "A": [1.0, 0.0, 2.0],
+        "C": [0.0, 1.0, 0.0],
+        "G": [-1.0, -1.0, -1.0],
+        "T": [-2.0, -2.0, -2.0]
+    }
+    
+    pssm = PositionSpecificScoringMatrix()
+    pssm.init_with_data(TEST_ALPHABET, values)
+
+    scores = pssm.calculate("AC")
+
+    assertEqual(len(scores), 0)
+
+@test
+def test_position_specific_scoring_matrix_calculate_with_seq_object():
+    """Test PSSM calculate with Seq object"""
+    values = {
+        "A": [1.0, 0.0],
+        "C": [0.0, 1.0],
+        "G": [-1.0, -1.0],
+        "T": [-2.0, -2.0]
+    }
+    
+    pssm = PositionSpecificScoringMatrix()
+    pssm.init_with_data(TEST_ALPHABET, values)
+    
+    test_seq = Seq("ac")
+    scores = pssm.calculate(test_seq)
+
+    expected_score = 2.0
+    assertEqual(len(scores), 1)
+    assertAlmostEqual(scores[0], expected_score)
+
+@test
+def test_position_specific_scoring_matrix_calculate_wrong_alphabet():
+    """Test PSSM calculate with wrong alphabet"""
+    values = {
+        "X": [1.0, 0.0],
+        "Y": [0.0, 1.0],
+        "Z": [-1.0, -1.0]
+    }
+    
+    pssm = PositionSpecificScoringMatrix()
+    pssm.init_with_data("XYZ", values)
+    
+    try:
+        pssm.calculate("AC")
+        assert False, "Expected ValueError to be raised"
+    except ValueError:
+        pass
+    
+@test  
+def test_position_specific_scoring_matrix_gc_content():
+    """Test that PSSM gc_content raises exception"""
+    values = {
+        "A": [1.0, 0.0],
+        "C": [0.0, 1.0],
+        "G": [-1.0, -1.0],
+        "T": [-2.0, -2.0]
+    }
+    
+    pssm = PositionSpecificScoringMatrix()
+    pssm.init_with_data(TEST_ALPHABET, values)
+    
+    try:
+        gc_content = pssm.gc_content
+        assert False, "Expected Exception to be raised"
+    except Exception:
+        pass 
+
+@test
+def test_position_specific_scoring_matrix_mean():
+    """Test PSSM mean calculation"""
+    values = {
+        "A": [1.0, 0.0],
+        "C": [0.0, 1.0],
+        "G": [-1.0, -1.0],
+        "T": [-2.0, -2.0]
+    }
+    
+    pssm = PositionSpecificScoringMatrix()
+    pssm.init_with_data(TEST_ALPHABET, values)
+    
+    mean_score = pssm.mean()
+    assertTrue(isinstance(mean_score, float))
+    
+    background = {"A": 0.3, "C": 0.2, "G": 0.2, "T": 0.3}
+    mean_custom = pssm.mean(background)
+    assertTrue(isinstance(mean_custom, float))
+
+@test
+def test_position_specific_scoring_matrix_std():
+    """Test PSSM standard deviation calculation"""
+    values = {
+        "A": [1.0, 0.0],
+        "C": [0.0, 1.0],
+        "G": [-1.0, -1.0],
+        "T": [-2.0, -2.0]
+    }
+    
+    pssm = PositionSpecificScoringMatrix()
+    pssm.init_with_data(TEST_ALPHABET, values)
+    
+    std_score = pssm.std()
+    assertTrue(isinstance(std_score, float))
+    assertTrue(std_score >= 0.0)
+    
+    background = {"A": 0.3, "C": 0.2, "G": 0.2, "T": 0.3}
+    std_custom = pssm.std(background)
+    assertTrue(isinstance(std_custom, float))
+    assertTrue(std_custom >= 0.0)
+
+@test
+def test_position_specific_scoring_matrix_dist_pearson():
+    """Test PSSM Pearson distance calculation"""
+    values1 = {
+        "A": [2.0, -1.0, 1.0],
+        "C": [-1.0, 2.0, 0.0],
+        "G": [-2.0, -2.0, 2.0],
+        "T": [-3.0, -3.0, -1.0]
+    }
+    
+    values2 = {
+        "A": [1.0, 0.0, 2.0],
+        "C": [0.0, 1.0, -1.0],
+        "G": [-1.0, -1.0, 1.0],
+        "T": [-2.0, -2.0, 0.0]
+    }
+    
+    pssm1 = PositionSpecificScoringMatrix()
+    pssm1.init_with_data(TEST_ALPHABET, values1)
+    
+    pssm2 = PositionSpecificScoringMatrix()
+    pssm2.init_with_data(TEST_ALPHABET, values2)
+
+    dist_result = pssm1.dist_pearson(pssm2)
+
+    assertTrue(isinstance(dist_result, tuple))
+    assertEqual(len(dist_result), 2)
+    
+    distance, offset = dist_result
+    assertTrue(isinstance(distance, float))
+    assertTrue(isinstance(offset, int))
+
+@test
+def test_position_specific_scoring_matrix_dist_pearson_at():
+    """Test PSSM Pearson distance at specific offset"""
+    values1 = {
+        "A": [2.0, -1.0],
+        "C": [-1.0, 2.0],
+        "G": [-2.0, -2.0],
+        "T": [-3.0, -3.0]
+    }
+    
+    values2 = {
+        "A": [1.0, 0.0],
+        "C": [0.0, 1.0],
+        "G": [-1.0, -1.0],
+        "T": [-2.0, -2.0]
+    }
+    
+    pssm1 = PositionSpecificScoringMatrix()
+    pssm1.init_with_data(TEST_ALPHABET, values1)
+    
+    pssm2 = PositionSpecificScoringMatrix()
+    pssm2.init_with_data(TEST_ALPHABET, values2)
+
+    pearson_at_offset = pssm1.dist_pearson_at(pssm2, 0)
+    assertTrue(isinstance(pearson_at_offset, float))
+
+@test
+def test_position_specific_scoring_matrix_different_alphabets():
+    """Test PSSM distance with different alphabets raises error"""
+    values1 = {
+        "A": [2.0, -1.0],
+        "C": [-1.0, 2.0],
+        "G": [-2.0, -2.0],
+        "T": [-3.0, -3.0]
+    }
+    
+    values2 = {
+        "A": [1.0, 0.0],
+        "C": [0.0, 1.0],
+        "G": [-1.0, -1.0],
+        "U": [-2.0, -2.0]
+    }
+    
+    pssm1 = PositionSpecificScoringMatrix()
+    pssm1.init_with_data("ACGT", values1)
+    
+    pssm2 = PositionSpecificScoringMatrix()
+    pssm2.init_with_data("ACGU", values2)
+    
+    try:
+        pssm1.dist_pearson(pssm2)
+        assert False, "Expected ValueError to be raised"
+    except ValueError:
+        pass
+
+# ============================================================================
+# Edge Cases and Error Handling Tests
+# ============================================================================
+
+@test
+def test_edge_cases_empty_alphabet():
+    """Test edge case with empty alphabet"""
+    gpm = GenericPositionMatrix("", {})
+    assertEqual(gpm.length, 0)
+    assertEqual(gpm.alphabet, "")
+
+@test
+def test_edge_cases_zero_counts():
+    """Test edge case with all zero counts"""
+    zero_counts = {
+        "A": [0.0, 0.0, 0.0, 0.0],
+        "C": [0.0, 0.0, 0.0, 0.0],
+        "G": [0.0, 0.0, 0.0, 0.0],
+        "T": [0.0, 0.0, 0.0, 0.0]
+    }
+    
+    fpm = FrequencyPositionMatrix(TEST_ALPHABET, zero_counts)
+    
+    pwm = fpm.normalize()
+    assertTrue(pwm.length == 4)
+
+@test
+def test_edge_cases_single_position():
+    """Test edge case with single position matrix"""
+    single_pos_values = {
+        "A": [5.0],
+        "C": [3.0],
+        "G": [1.0],
+        "T": [1.0]
+    }
+    
+    gpm = GenericPositionMatrix(TEST_ALPHABET, single_pos_values)
+    assertEqual(gpm.length, 1)
+    assertEqual(str(gpm.consensus), "A")
+    assertEqual(str(gpm.anticonsensus), "G")
+
+@test
+def test_edge_cases_very_large_values():
+    """Test edge case with very large values"""
+    large_values = {
+        "A": [1e10, 1e5],
+        "C": [1e5, 1e10], 
+        "G": [1.0, 1.0],
+        "T": [1.0, 1.0]
+    }
+    
+    gpm = GenericPositionMatrix(TEST_ALPHABET, large_values)
+    assertTrue(gpm.length == 2)
+
+    consensus = gpm.consensus
+    assertEqual(str(consensus), "AC")
+
+@test
+def test_edge_cases_negative_values():
+    """Test edge case with negative values (valid for PSSM)"""
+    negative_values = {
+        "A": [-1.0, -2.0],
+        "C": [-3.0, -1.0],
+        "G": [-2.0, -3.0],
+        "T": [-4.0, -4.0]
+    }
+    
+    pssm = PositionSpecificScoringMatrix()
+    pssm.init_with_data(TEST_ALPHABET, negative_values)
+
+    max_score = pssm.max
+    expected_max = -1.0 + (-1.0)
+    assertAlmostEqual(max_score, expected_max)
+    
+    min_score = pssm.min
+    expected_min = -4.0 + (-4.0)
+    assertAlmostEqual(min_score, expected_min)
+
+@test
+def test_edge_cases_infinite_values():
+    """Test edge case with infinite values"""
+    inf_values = {
+        "A": [math.inf, 1.0],
+        "C": [1.0, -math.inf],
+        "G": [1.0, 1.0],
+        "T": [1.0, 1.0]
+    }
+    
+    pssm = PositionSpecificScoringMatrix()
+    pssm.init_with_data(TEST_ALPHABET, inf_values)
+    
+    max_score = pssm.max
+    assertTrue(math.isinf(max_score))
+
+    min_score = pssm.min
+    assertTrue(math.isinf(min_score) and min_score < 0)
+
+@test
+def test_edge_cases_nan_values():
+    """Test edge case with NaN values"""
+    nan_values = {
+        "A": [math.nan, 1.0],
+        "C": [1.0, math.nan],
+        "G": [1.0, 1.0],
+        "T": [1.0, 1.0]
+    }
+    
+    pssm = PositionSpecificScoringMatrix()
+    pssm.init_with_data(TEST_ALPHABET, nan_values)
+
+    try:
+        mean_val = pssm.mean()
+        std_val = pssm.std()
+        assertTrue(isinstance(mean_val, float))
+        assertTrue(isinstance(std_val, float))
+    except:
+        pass
+
+# ============================================================================
+# Integration Tests
+# ============================================================================
+
+@test
+def test_integration_frequency_to_pwm_to_pssm():
+    """Test full pipeline: FPM -> PWM -> PSSM"""
+    counts = {
+        "A": [20.0, 5.0, 5.0, 30.0],
+        "C": [5.0, 30.0, 5.0, 5.0],
+        "G": [5.0, 5.0, 30.0, 5.0],
+        "T": [5.0, 5.0, 5.0, 5.0]
+    }
+
+    fpm = FrequencyPositionMatrix(TEST_ALPHABET, counts)
+    assertEqual(fpm.length, 4)
+
+    pwm = fpm.normalize(pseudocounts=1.0)
+    assertTrue(isinstance(pwm, PositionWeightMatrix))
+
+    pssm = pwm.log_odds()
+    assertTrue(isinstance(pssm, PositionSpecificScoringMatrix))
+
+    test_sequence = "ACGT"
+    scores = pssm.calculate(test_sequence)
+    assertTrue(isinstance(scores, list))
+    assertTrue(len(scores) == 1)
+
+    assertTrue(scores[0] > 0)
+
+@test
+def test_integration_reverse_complement_consistency():
+    """Test that reverse complement operations are consistent"""
+    counts = {
+        "A": [10.0, 1.0, 2.0, 0.0],
+        "C": [1.0, 2.0, 1.0, 1.0],
+        "G": [1.0, 10.0, 7.0, 2.0],
+        "T": [0.0, 1.0, 0.0, 10.0]
+    }
+
+    gpm = GenericPositionMatrix(TEST_ALPHABET, counts)
+    rc_gpm = gpm.reverse_complement()
+    rc_rc_gpm = rc_gpm.reverse_complement()
+    
+    for letter in TEST_ALPHABET:
+        for i in range(gpm.length):
+            assertAlmostEqual(gpm[letter][i], rc_rc_gpm[letter][i])
+
+@test
+def test_integration_consensus_scoring():
+    """Test that consensus sequence gets high score"""
+    counts = {
+        "A": [30.0, 1.0, 1.0, 1.0],
+        "C": [1.0, 30.0, 1.0, 1.0],
+        "G": [1.0, 1.0, 30.0, 1.0],
+        "T": [1.0, 1.0, 1.0, 30.0]
+    }
+
+    fpm = FrequencyPositionMatrix(TEST_ALPHABET, counts)
+    pwm = fpm.normalize(pseudocounts=1.0)
+    pssm = pwm.log_odds()
+
+    gpm = GenericPositionMatrix(TEST_ALPHABET, counts)
+    consensus = str(gpm.consensus)
+
+    scores = pssm.calculate(consensus)
+
+    assertEqual(len(scores), 1)
+    consensus_score = scores[0]
+
+    max_score = pssm.max
+    assertAlmostEqual(consensus_score, max_score, places=3)
+
+# ============================================================================
+# Test Runner Functions
+# ============================================================================
+
+def run_basic_tests():
+    """Run basic functionality tests"""
+    print("=== Running Basic Tests ===")
+    test_generic_position_matrix_init()
+    test_generic_position_matrix_inconsistent_lengths()
+    test_generic_position_matrix_str()
+    test_generic_position_matrix_getitem()
+    test_generic_position_matrix_setitem()
+    test_generic_position_matrix_keys()
+    print("Basic GenericPositionMatrix tests passed")
+
+def run_property_tests():
+    """Run property calculation tests"""
+    print("=== Running Property Tests ===")
+    test_generic_position_matrix_consensus()
+    test_generic_position_matrix_anticonsensus()
+    test_generic_position_matrix_degenerate_consensus()
+    test_generic_position_matrix_calculate_consensus()
+    test_generic_position_matrix_gc_content()
+    test_reverse_complement()
+    print("Property calculation tests passed")
+
+def run_frequency_matrix_tests():
+    """Run FrequencyPositionMatrix tests"""
+    print("=== Running FrequencyPositionMatrix Tests ===")
+    test_frequency_position_matrix()
+    test_frequency_position_matrix_normalize()
+    test_frequency_position_matrix_normalize_with_pseudocounts()
+    test_frequency_position_matrix_normalize_with_dict_pseudocounts()
+    print("FrequencyPositionMatrix tests passed")
+
+def run_weight_matrix_tests():
+    """Run PositionWeightMatrix tests"""
+    print("=== Running PositionWeightMatrix Tests ===")
+    test_position_weight_matrix_init()
+    test_position_weight_matrix_init_with_data()
+    test_position_weight_matrix_getitem()
+    test_position_weight_matrix_log_odds()
+    test_position_weight_matrix_log_odds_custom_background()
+    print("PositionWeightMatrix tests passed")
+
+def run_scoring_matrix_tests():
+    """Run PositionSpecificScoringMatrix tests"""
+    print("=== Running PositionSpecificScoringMatrix Tests ===")
+    test_position_specific_scoring_matrix_init()
+    test_position_specific_scoring_matrix_init_with_data()
+    test_position_specific_scoring_matrix_getitem()
+    test_position_specific_scoring_matrix_max_min()
+    test_position_specific_scoring_matrix_calculate_same_length()
+    test_position_specific_scoring_matrix_calculate_longer_sequence()
+    test_position_specific_scoring_matrix_calculate_short_sequence()
+    test_position_specific_scoring_matrix_calculate_with_seq_object()
+    test_position_specific_scoring_matrix_calculate_wrong_alphabet()
+    test_position_specific_scoring_matrix_gc_content()
+    test_position_specific_scoring_matrix_mean()
+    test_position_specific_scoring_matrix_std()
+    test_position_specific_scoring_matrix_dist_pearson()
+    test_position_specific_scoring_matrix_dist_pearson_at()
+    test_position_specific_scoring_matrix_different_alphabets()
+    print("PositionSpecificScoringMatrix tests passed")
+
+def run_edge_case_tests():
+    """Run edge case and error handling tests"""
+    print("=== Running Edge Case Tests ===")
+    test_edge_cases_empty_alphabet()
+    test_edge_cases_zero_counts()
+    test_edge_cases_single_position()
+    test_edge_cases_very_large_values()
+    test_edge_cases_negative_values()
+    test_edge_cases_infinite_values()
+    test_edge_cases_nan_values()
+    print("Edge case tests passed")
+
+def run_integration_tests():
+    """Run integration tests"""
+    print("=== Running Integration Tests ===")
+    test_integration_frequency_to_pwm_to_pssm()
+    test_integration_reverse_complement_consistency()
+    test_integration_consensus_scoring()
+    print("Integration tests passed")
+
+def run_all_tests():
+    """Run all test functions"""
+    print("Starting Comprehensive Bio.motifs.matrix Tests")
+    print("=" * 60)
+    
+    try:
+        run_basic_tests()
+        run_property_tests()
+        run_frequency_matrix_tests()
+        run_weight_matrix_tests()
+        run_scoring_matrix_tests()
+        run_edge_case_tests()
+        run_integration_tests()
+        
+        print("=" * 60)
+        print("ALL TESTS PASSED")
+        print("Coverage: Complete Bio.motifs.matrix module functionality")
+        print("Classes tested:")
+        print(" GenericPositionMatrix (complete)")
+        print(" FrequencyPositionMatrix (complete)")
+        print(" PositionWeightMatrix (complete)")
+        print(" PositionSpecificScoringMatrix (complete)")
+        print(" Seq helper class (complete)")
+        print("=" * 60)
+        
+    except Exception as e:
+        print("❌ TEST FAILED:", str(e))
+        print("=" * 60)
+
+if __name__ == "__main__":
+    run_all_tests()

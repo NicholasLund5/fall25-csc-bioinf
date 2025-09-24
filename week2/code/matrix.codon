@@ -1,0 +1,656 @@
+
+import math
+from python import numpy as np
+from typing import Optional
+
+class Seq:
+    def __init__(self, sequence: str):
+        self._data = sequence
+    
+    def __str__(self) -> str:
+        return self._data
+    
+    def __repr__(self) -> str:
+        return "Seq('" + self._data + "')"
+    
+    def __len__(self) -> int:
+        return len(self._data)
+    
+    def __getitem__(self, index: int) -> str:
+        return self._data[index]
+
+class GenericPositionMatrix:
+    """Base class for the support of position matrix operations."""
+
+    def __init__(self, alphabet: str, values: Dict[str, List[float]]):
+        """Initialize the class."""
+        self.data = Dict[str, List[float]]()
+        self.length = 0
+        for letter in alphabet:
+            if self.length == 0:
+                self.length = len(values[letter])
+            elif self.length != len(values[letter]):
+                raise Exception("data has inconsistent lengths")
+            float_list = []
+            for val in values[letter]:
+                float_list.append(float(val))
+            self.data[letter] = float_list
+        self.alphabet = alphabet
+
+    def __getitem__(self, key):
+        """Return the position matrix of index key."""
+        if isinstance(key, tuple):
+            if len(key) == 2:
+                key1, key2 = key
+                if isinstance(key1, str) and len(key1) == 1:
+                    letter1 = key1
+                    dim1 = 1
+                elif isinstance(key1, int):
+                    letter1 = self.alphabet[key1]
+                    dim1 = 1
+                else:
+                    raise KeyError("Cannot understand key " + str(key1))
+                
+                if isinstance(key2, int):
+                    index2 = key2
+                    dim2 = 1
+                else:
+                    raise KeyError("Cannot understand key " + str(key2))
+                
+                if dim1 == 1 and dim2 == 1:
+                    return self.data[letter1][index2]
+            else:
+                raise KeyError("keys should be 1- or 2-dimensional")
+        
+        if isinstance(key, str) and len(key) == 1:
+            return self.data[key]
+        elif isinstance(key, int):
+            letter = self.alphabet[key]
+            return self.data[letter]
+        else:
+            raise KeyError("Cannot understand key " + str(key))
+
+    def __setitem__(self, key: str, value: List[float]):
+        """Set the position matrix values for a letter."""
+        self.data[key] = value
+
+    def keys(self):
+        """Return the keys (letters) of the matrix."""
+        return self.data.keys()
+
+    def __str__(self) -> str:
+        """Return a string containing nucleotides and counts of the alphabet in the Matrix."""
+        words = []
+        for i in range(self.length):
+            words.append(str(i).rjust(6))
+        line = "   " + " ".join(words)
+        lines = [line]
+        
+        for letter in self.alphabet:
+            words = []
+            for value in self.data[letter]:
+                formatted_value = str(round(value, 2))
+                words.append(formatted_value.rjust(6))
+            line = letter + ": " + " ".join(words)
+            lines.append(line)
+        text = "\n".join(lines) + "\n"
+        return text
+
+    @property
+    def consensus(self) -> Seq:
+        """Return the consensus sequence."""
+        sequence = ""
+        for i in range(self.length):
+            maximum = -math.inf
+            sequence_letter = ""
+            for letter in self.alphabet:
+                count = self.data[letter][i]
+                if count > maximum:
+                    maximum = count
+                    sequence_letter = letter
+            sequence += sequence_letter
+        return Seq(sequence)
+
+    @property
+    def anticonsensus(self) -> Seq:
+        """Return the anticonsensus sequence."""
+        sequence = ""
+        for i in range(self.length):
+            minimum = math.inf
+            sequence_letter = ""
+            for letter in self.alphabet:
+                count = self.data[letter][i]
+                if count < minimum:
+                    minimum = count
+                    sequence_letter = letter
+            sequence += sequence_letter
+        return Seq(sequence)
+
+    @property
+    def degenerate_consensus(self) -> Seq:
+        """Return the degenerate consensus sequence."""
+        degenerate_nucleotide = {
+            "A": "A",
+            "C": "C",
+            "G": "G",
+            "T": "T",
+            "U": "U",
+            "AC": "M",
+            "AG": "R",
+            "AT": "W",
+            "AU": "W",
+            "CG": "S",
+            "CT": "Y",
+            "CU": "Y",
+            "GT": "K",
+            "GU": "K",
+            "ACG": "V",
+            "ACT": "H",
+            "ACU": "H",
+            "AGT": "D",
+            "AGU": "D",
+            "CGT": "B",
+            "CGU": "B",
+            "ACGT": "N",
+            "ACGU": "N",
+        }
+        sequence = ""
+        for i in range(self.length):
+            nucleotides_counts = []
+            for nucleotide in self.alphabet:
+                nucleotides_counts.append((self.data[nucleotide][i], nucleotide))
+            nucleotides_counts.sort(reverse=True)
+            
+            nucleotides = [nc[1] for nc in nucleotides_counts]
+            counts = [nc[0] for nc in nucleotides_counts]
+            
+            if counts[0] > sum(counts[1:]) and counts[0] > 2 * counts[1]:
+                key = nucleotides[0]
+            elif 4 * sum(counts[:2]) > 3 * sum(counts):
+                key = "".join(sorted(nucleotides[:2]))
+            elif counts[3] == 0:
+                key = "".join(sorted(nucleotides[:3]))
+            else:
+                key = "ACGT"
+            
+            if key in degenerate_nucleotide:
+                nucleotide = degenerate_nucleotide[key]
+            else:
+                nucleotide = key
+            sequence += nucleotide
+        return Seq(sequence)
+
+    def calculate_consensus(self, substitution_matrix=None, plurality=None, identity=0.0, setcase=None) -> str:
+        alphabet = self.alphabet
+        alphabet_set = set(alphabet)
+        if alphabet_set.union(set("ACGTUN-")) == set("ACGTUN-"):
+            undefined = "N"
+        else:
+            undefined = "X"
+        
+        if substitution_matrix is None:
+            if plurality is not None:
+                raise ValueError("plurality must be None if substitution_matrix is None")
+            sequence = ""
+            for i in range(self.length):
+                maximum = 0.0
+                total = 0.0
+                consensus_letter = ""
+                for letter in alphabet:
+                    count = self.data[letter][i]
+                    total += count
+                    if count > maximum:
+                        maximum = count
+                        consensus_letter = letter
+                if maximum < identity * total:
+                    consensus_letter = undefined
+                else:
+                    if setcase is None:
+                        setcase_threshold = total / 2.0
+                    else:
+                        setcase_threshold = setcase * total
+                    if maximum <= setcase_threshold:
+                        consensus_letter = consensus_letter.lower()
+                sequence += consensus_letter
+        else:
+            raise NotImplementedError("calculate_consensus currently only supports substitution_matrix=None")
+        return sequence
+
+    @property
+    def gc_content(self) -> float:
+        """Compute the fraction GC content."""
+        alphabet = self.alphabet
+        gc_total = 0.0
+        total = 0.0
+        for i in range(self.length):
+            for letter in alphabet:
+                if letter in "CG":
+                    gc_total += self.data[letter][i]
+                total += self.data[letter][i]
+        return gc_total / total
+
+    def reverse_complement(self):
+        """Compute reverse complement."""
+        values = Dict[str, List[float]]()
+        if self.alphabet == "ACGU":
+            values["A"] = self.data["U"][::-1]
+            values["U"] = self.data["A"][::-1]
+        else:
+            values["A"] = self.data["T"][::-1]
+            values["T"] = self.data["A"][::-1]
+        values["G"] = self.data["C"][::-1]
+        values["C"] = self.data["G"][::-1]
+        alphabet = self.alphabet
+        return self.__class__(alphabet, values)
+
+
+class FrequencyPositionMatrix:
+    """Class for the support of frequency calculations on the Position Matrix."""
+    def __init__(self, alphabet: str, values: Dict[str, List[float]]):
+        self.data = Dict[str, List[float]]()
+        self.length = 0
+        for letter in alphabet:
+            if self.length == 0:
+                self.length = len(values[letter])
+            elif self.length != len(values[letter]):
+                raise Exception("data has inconsistent lengths")
+            float_list = []
+            for val in values[letter]:
+                float_list.append(float(val))
+            self.data[letter] = float_list
+        self.alphabet = alphabet
+
+    def __getitem__(self, key: str) -> List[float]:
+        """Get counts for a specific letter."""
+        if key in self.data:  # Change from self._counts to self.data
+            return self.data[key]
+        else:
+            raise KeyError("Letter '" + key + "' not found in alphabet")
+
+    def normalize(self, pseudocounts=None):
+        counts = Dict[str, List[float]]()
+        if pseudocounts is None:
+            for letter in self.alphabet:
+                zero_list = []
+                for i in range(self.length):
+                    zero_list.append(0.0)
+                counts[letter] = zero_list
+        elif isinstance(pseudocounts, Dict[str, float]):
+            for letter in self.alphabet:
+                pseudo_list = []
+                for i in range(self.length):
+                    pseudo_list.append(float(pseudocounts[letter]))
+                counts[letter] = pseudo_list
+        else:
+            for letter in self.alphabet:
+                pseudo_list = []
+                for i in range(self.length):
+                    pseudo_list.append(float(pseudocounts))
+                counts[letter] = pseudo_list
+        
+        for i in range(self.length):
+            for letter in self.alphabet:
+                counts[letter][i] += self.data[letter][i]
+        
+        pwm = PositionWeightMatrix()
+        pwm.data = counts
+        pwm.alphabet = self.alphabet
+        pwm.length = self.length
+        for i in range(pwm.length):
+            total = 0.0
+            for letter in pwm.alphabet:
+                total += pwm.data[letter][i]
+            for letter in pwm.alphabet:
+                pwm.data[letter][i] /= total
+        return pwm
+
+
+class PositionWeightMatrix:
+    """Class for the support of weight calculations on the Position Matrix."""
+    def __init__(self):
+        """Initialize the class."""
+        self.data = Dict[str, List[float]]()
+        self.length = 0
+        self.alphabet = ""
+
+    def init_with_data(self, alphabet: str, counts: Dict[str, List[float]]):
+        """Initialize with data and normalize."""
+        self.data = Dict[str, List[float]]()
+        self.length = 0
+        for letter in alphabet:
+            if self.length == 0:
+                self.length = len(counts[letter])
+            elif self.length != len(counts[letter]):
+                raise Exception("data has inconsistent lengths")
+            float_list = []
+            for val in counts[letter]:
+                float_list.append(float(val))
+            self.data[letter] = float_list
+        self.alphabet = alphabet
+        
+        for i in range(self.length):
+            total = 0.0
+            for letter in alphabet:
+                total += self.data[letter][i]
+            for letter in alphabet:
+                self.data[letter][i] /= total
+
+    def __getitem__(self, key):
+        """Return the position matrix of index key."""
+        if isinstance(key, tuple):
+            if len(key) == 2:
+                key1, key2 = key
+                if isinstance(key1, str) and len(key1) == 1:
+                    letter1 = key1
+                elif isinstance(key1, int):
+                    letter1 = self.alphabet[key1]
+                else:
+                    raise KeyError("Cannot understand key " + str(key1))
+                
+                if isinstance(key2, int):
+                    index2 = key2
+                    return self.data[letter1][index2]
+        
+        if isinstance(key, str) and len(key) == 1:
+            return self.data[key]
+        elif isinstance(key, int):
+            letter = self.alphabet[key]
+            return self.data[letter]
+        else:
+            raise KeyError("Cannot understand key " + str(key))
+
+    def log_odds(self, background: Optional[Dict[str, float]] = None):
+        """Return the Position-Specific Scoring Matrix.
+
+        The Position-Specific Scoring Matrix (PSSM) contains the log-odds
+        scores computed from the probability matrix and the background
+        probabilities. If the background is None, a uniform background
+        distribution is assumed.
+        """
+        values = Dict[str, List[float]]()
+        alphabet = self.alphabet
+        
+        if background is None:
+            background = Dict[str, float]()
+            for letter in self.alphabet:
+                background[letter] = 1.0
+        else:
+            background = Dict[str, float](background)
+        
+        total = 0.0
+        for letter in alphabet:
+            total += background[letter]
+        
+        for letter in alphabet:
+            background[letter] /= total
+            values[letter] = []
+        
+        for i in range(self.length):
+            for letter in alphabet:
+                b = background[letter]
+                if b > 0:
+                    p = self.data[letter][i]
+                    if p > 0:
+                        logodds = math.log(p / b, 2)
+                    else:
+                        logodds = -math.inf
+                else:
+                    p = self.data[letter][i]
+                    if p > 0:
+                        logodds = math.inf
+                    else:
+                        logodds = math.nan
+                values[letter].append(logodds)
+        
+        pssm = PositionSpecificScoringMatrix()
+        pssm.init_with_data(alphabet, values)
+        return pssm
+
+
+class PositionSpecificScoringMatrix:
+    """Class for the support of Position Specific Scoring Matrix calculations."""
+    def __init__(self):
+        """Initialize the class."""
+        self.data = Dict[str, List[float]]()
+        self.length = 0
+        self.alphabet = ""
+
+    def init_with_data(self, alphabet: str, values: Dict[str, List[float]]):
+        """Initialize with data."""
+        self.data = Dict[str, List[float]]()
+        self.length = 0
+        for letter in alphabet:
+            if self.length == 0:
+                self.length = len(values[letter])
+            elif self.length != len(values[letter]):
+                raise Exception("data has inconsistent lengths")
+            float_list = []
+            for val in values[letter]:
+                float_list.append(float(val))
+            self.data[letter] = float_list
+        self.alphabet = alphabet
+
+    def __getitem__(self, key):
+        """Return the position matrix of index key."""
+        if isinstance(key, tuple):
+            if len(key) == 2:
+                key1, key2 = key
+                if isinstance(key1, str) and len(key1) == 1:
+                    letter1 = key1
+                elif isinstance(key1, int):
+                    letter1 = self.alphabet[key1]
+                else:
+                    raise KeyError("Cannot understand key " + str(key1))
+                
+                if isinstance(key2, int):
+                    index2 = key2
+                    return self.data[letter1][index2]
+        
+        if isinstance(key, str) and len(key) == 1:
+            return self.data[key]
+        elif isinstance(key, int):
+            letter = self.alphabet[key]
+            return self.data[letter]
+        else:
+            raise KeyError("Cannot understand key " + str(key))
+
+    def calculate(self, sequence) -> List[float]:
+            """Calculate PSSM scores for a sequence."""
+            alphabet_list = list(self.alphabet)
+            alphabet_list.sort()
+            if alphabet_list != ["A", "C", "G", "T"]:
+                raise ValueError("PSSM has wrong alphabet: " + str(self.alphabet) + " - Use only with DNA motifs")
+
+            if hasattr(sequence, '_data'):
+                seq_str = sequence._data.upper()
+            elif isinstance(sequence, str):
+                seq_str = sequence.upper()
+            else:
+                seq_str = str(sequence).upper()
+
+            n = len(seq_str)
+            m = self.length
+            
+            if n < m:
+                return []
+            
+            scores = []
+            for start in range(n - m + 1):
+                score = 0.0
+                valid = True
+                for i in range(m):
+                    base = seq_str[start + i]
+                    if base in self.alphabet:
+                        score += self.data[base][i]
+                    else:
+                        raise ValueError("Invalid character '" + base + "' in sequence at position " + str(start + i))
+                scores.append(score)
+
+            return scores
+
+    @property
+    def max(self) -> float:
+        """Maximal possible score for this motif.
+
+        returns the score computed for the consensus sequence.
+        """
+        score = 0.0
+        letters = self.alphabet
+        for position in range(self.length):
+            max_score = -math.inf
+            for letter in letters:
+                letter_score = self.data[letter][position]
+                if letter_score > max_score:
+                    max_score = letter_score
+            score += max_score
+        return score
+
+    @property
+    def min(self) -> float:
+        """Minimal possible score for this motif.
+
+        returns the score computed for the anticonsensus sequence.
+        """
+        score = 0.0
+        letters = self.alphabet
+        for position in range(self.length):
+            min_score = math.inf
+            for letter in letters:
+                letter_score = self.data[letter][position]
+                if letter_score < min_score:
+                    min_score = letter_score
+            score += min_score
+        return score
+
+    @property
+    def gc_content(self):
+        """Compute the GC-ratio."""
+        raise Exception("Cannot compute the %GC composition of a PSSM")
+
+    def mean(self, background: Optional[Dict[str, float]] = None) -> float:
+        """Return expected value of the score of a motif."""
+        if background is None:
+            background = Dict[str, float]()
+            for letter in self.alphabet:
+                background[letter] = 1.0
+        else:
+            background = Dict[str, float](background)
+        
+        total = 0.0
+        for letter in self.alphabet:
+            total += background[letter]
+        
+        for letter in self.alphabet:
+            background[letter] /= total
+        
+        sx = 0.0
+        for i in range(self.length):
+            for letter in self.alphabet:
+                logodds = self.data[letter][i]
+                if math.isnan(logodds):
+                    continue
+                if math.isinf(logodds) and logodds < 0:
+                    continue
+                b = background[letter]
+                p = b * math.pow(2, logodds)
+                sx += p * logodds
+        return sx
+
+    def std(self, background: Optional[Dict[str, float]] = None) -> float:
+        """Return standard deviation of the score of a motif."""
+        if background is None:
+            background = Dict[str, float]()
+            for letter in self.alphabet:
+                background[letter] = 1.0
+        else:
+            background = Dict[str, float](background)
+        
+        total = 0.0
+        for letter in self.alphabet:
+            total += background[letter]
+        
+        for letter in self.alphabet:
+            background[letter] /= total
+        
+        variance = 0.0
+        for i in range(self.length):
+            sx = 0.0
+            sxx = 0.0
+            for letter in self.alphabet:
+                logodds = self.data[letter][i]
+                if math.isnan(logodds):
+                    continue
+                if math.isinf(logodds) and logodds < 0:
+                    continue
+                b = background[letter]
+                p = b * math.pow(2, logodds)
+                sx += p * logodds
+                sxx += p * logodds * logodds
+            sxx -= sx * sx
+            variance += sxx
+        
+        if variance < 0:
+            variance = 0.0
+        return math.sqrt(variance)
+
+    def dist_pearson(self, other):
+        """Return the similarity score based on pearson correlation for the given motif against self.
+
+        We use the Pearson's correlation of the respective probabilities.
+        """
+        if self.alphabet != other.alphabet:
+            raise ValueError("Cannot compare motifs with different alphabets")
+
+        max_p = -2.0
+        max_o = 0
+        for offset in range(-self.length + 1, other.length):
+            if offset < 0:
+                p = self.dist_pearson_at(other, -offset)
+            else:
+                p = other.dist_pearson_at(self, offset)
+            if max_p < p:
+                max_p = p
+                max_o = -offset
+        return 1 - max_p, max_o
+
+    def dist_pearson_at(self, other, offset: int) -> float:
+        """Return the similarity score based on pearson correlation at the given offset."""
+        letters = self.alphabet
+        sx = 0.0
+        sy = 0.0
+        sxx = 0.0
+        sxy = 0.0
+        syy = 0.0
+        
+        length1 = self.length
+        length2 = other.length
+        max_length = max(length1, offset + length2)
+        norm = float(max_length * len(letters))
+        
+        min_range = min(length1 - offset, length2)
+        for pos in range(min_range):
+            xi = []
+            yi = []
+            for letter in letters:
+                xi.append(self.data[letter][pos + offset])
+                yi.append(other.data[letter][pos])
+            
+            for x in xi:
+                sx += x
+            for y in yi:
+                sy += y
+            for x in xi:
+                sxx += x * x
+            for x, y in zip(xi, yi):
+                sxy += x * y
+            for y in yi:
+                syy += y * y
+        
+        sx /= norm
+        sy /= norm
+        sxx /= norm
+        sxy /= norm
+        syy /= norm
+        numerator = sxy - sx * sy
+        denominator = math.sqrt((sxx - sx * sx) * (syy - sy * sy))
+        return numerator / denominator

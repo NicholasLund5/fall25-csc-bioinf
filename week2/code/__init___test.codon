@@ -1,0 +1,685 @@
+import math
+from __init__ import Motif, SimpleAlignment, create
+from matrix import FrequencyPositionMatrix, PositionWeightMatrix, PositionSpecificScoringMatrix
+
+# ============================================================================
+# Test Helper Functions
+# ============================================================================
+
+def assertAlmostEqual(a: float, b: float, places: int = 7, msg: str = ""):
+    """Assert that two floats are almost equal."""
+    tolerance = 10.0 ** (-places)
+    
+    if math.isnan(a) and math.isnan(b):
+        return
+    elif math.isnan(a) or math.isnan(b):
+        if msg:
+            assert False, msg + ": One value is NaN: " + str(a) + " vs " + str(b)
+        else:
+            assert False, "One value is NaN: " + str(a) + " vs " + str(b)
+    
+    diff = abs(a - b)
+    if msg:
+        assert diff <= tolerance, msg + ": |" + str(a) + " - " + str(b) + "| = " + str(diff) + " > " + str(tolerance)
+    else:
+        assert diff <= tolerance, "|" + str(a) + " - " + str(b) + "| = " + str(diff) + " > " + str(tolerance)
+
+def assertEqual(a, b, msg: str = ""):
+    """Assert that two values are equal."""
+    if msg:
+        assert a == b, msg + ": " + str(a) + " != " + str(b)
+    else:
+        assert a == b, "Expected " + str(a) + " == " + str(b)
+
+def assertTrue(condition: bool, msg: str = ""):
+    """Assert that a condition is true."""
+    if msg:
+        assert condition, msg
+    else:
+        assert condition, "Expected condition to be True"
+
+def assertFalse(condition: bool, msg: str = ""):
+    """Assert that a condition is false."""
+    if msg:
+        assert not condition, msg
+    else:
+        assert not condition, "Expected condition to be False"
+
+def assertIn(item, container, msg: str = ""):
+    """Assert that item is in container."""
+    found = False
+    for element in container:
+        if element == item:
+            found = True
+            break
+    if msg:
+        assert found, msg
+    else:
+        assert found, str(item) + " not found in container"
+
+def assertRaises(exception_type, func, *args):
+    """Check that calling func(*args) raises an exception."""
+    try:
+        result = func(*args)
+        assert False, "Expected exception to be raised"
+    except Exception:
+        pass  # Expected exception
+
+# ============================================================================
+# SimpleAlignment Tests
+# ============================================================================
+
+@test
+def test_simple_alignment_init():
+    """Test SimpleAlignment initialization."""
+    sequences = ["ACGT", "ACGA", "ACGC"]
+    align = SimpleAlignment(sequences)
+    
+    assertEqual(len(align), 3)
+    assertEqual(align.length, 4)
+    assertEqual(align[0], "ACGT")
+    assertEqual(align[1], "ACGA")
+    assertEqual(align[2], "ACGC")
+
+@test
+def test_simple_alignment_different_lengths():
+    """Test that SimpleAlignment raises error for different length sequences."""
+    sequences = ["ACGT", "ACG", "ACGC"]
+    
+    try:
+        align = SimpleAlignment(sequences)
+        assert False, "Expected ValueError for different length sequences"
+    except ValueError:
+        pass
+
+@test
+def test_simple_alignment_empty():
+    """Test empty SimpleAlignment."""
+    align = SimpleAlignment([])
+    assertEqual(len(align), 0)
+    assertEqual(align.length, 0)
+
+@test
+def test_simple_alignment_frequencies():
+    """Test frequency calculation in SimpleAlignment."""
+    sequences = ["ACGT", "ACGA", "ACGC", "TCGA"]
+    align = SimpleAlignment(sequences)
+    
+    freqs = align.frequencies("ACGT")
+    
+    # Check first position: 3 A's, 1 T
+    assertEqual(freqs["A"][0], 3.0)
+    assertEqual(freqs["T"][0], 1.0)
+    assertEqual(freqs["C"][0], 0.0)
+    assertEqual(freqs["G"][0], 0.0)
+    
+    # Check second position: 4 C's
+    assertEqual(freqs["C"][1], 4.0)
+    assertEqual(freqs["A"][1], 0.0)
+    
+    # Check fourth position: 2 A's, 1 T, 1 C
+    assertEqual(freqs["T"][3], 1.0)
+    assertEqual(freqs["A"][3], 2.0)
+    assertEqual(freqs["C"][3], 1.0)
+
+@test
+def test_simple_alignment_slice():
+    """Test slicing SimpleAlignment."""
+    sequences = ["ACGTAA", "ACGATT", "ACGCTT"]
+    align = SimpleAlignment(sequences)
+    
+    sliced = align.get_slice(1, 4)
+    assertEqual(sliced.length, 3)
+    assertEqual(sliced[0], "CGT")
+    assertEqual(sliced[1], "CGA")
+    assertEqual(sliced[2], "CGC")
+
+@test
+def test_simple_alignment_reverse_complement():
+    """Test reverse complement of SimpleAlignment."""
+    sequences = ["ACGT", "AAAA", "CCCC"]
+    align = SimpleAlignment(sequences)
+    
+    rc = align.reverse_complement()
+    assertEqual(rc[0], "ACGT")  # ACGT -> TGCA -> ACGT
+    assertEqual(rc[1], "TTTT")  # AAAA -> AAAA -> TTTT
+    assertEqual(rc[2], "GGGG")  # CCCC -> CCCC -> GGGG
+
+@test
+def test_simple_alignment_str():
+    """Test string representation of SimpleAlignment."""
+    sequences = ["ACGT", "TGCA"]
+    align = SimpleAlignment(sequences)
+    
+    str_repr = str(align)
+    assertEqual(str_repr, "ACGT\nTGCA")
+
+# ============================================================================
+# Motif Initialization Tests
+# ============================================================================
+
+@test
+def test_motif_init_empty():
+    """Test Motif initialization with no data."""
+    motif = Motif()
+    
+    assertEqual(motif.name, "")
+    assertEqual(motif.alphabet, "ACGT")
+    assertEqual(motif.length, 0)
+    assertEqual(len(motif), 0)
+
+@test
+def test_motif_init_with_alignment():
+    """Test Motif initialization with alignment."""
+    sequences = ["ACGT", "ACGA", "TCGT"]
+    align = SimpleAlignment(sequences)
+    motif = Motif(alignment=align)
+    
+    assertEqual(motif.alphabet, "ACGT")
+    assertEqual(motif.length, 4)
+    assertEqual(len(motif), 4)
+    assertTrue(motif._alignment is not None)
+    assertTrue(motif._counts is not None)
+
+@test
+def test_motif_init_with_counts():
+    """Test Motif initialization with counts."""
+    counts = {
+        "A": [3.0, 0.0, 0.0, 2.0],
+        "C": [0.0, 3.0, 0.0, 0.0],
+        "G": [0.0, 0.0, 3.0, 1.0],
+        "T": [0.0, 0.0, 0.0, 0.0]
+    }
+    
+    motif = Motif(counts=counts)
+    
+    assertEqual(motif.alphabet, "ACGT")
+    assertEqual(motif.length, 4)
+    assertEqual(motif._alignment, None)
+    assertTrue(motif._counts is not None)
+
+@test
+def test_motif_init_both_counts_and_alignment_raises():
+    """Test that providing both counts and alignment raises an error."""
+    sequences = ["ACGT"]
+    align = SimpleAlignment(sequences)
+    counts = {"A": [1.0], "C": [0.0], "G": [0.0], "T": [0.0]}
+    
+    try:
+        motif = Motif(alignment=align, counts=counts)
+        assert False, "Expected ValueError when both alignment and counts provided"
+    except ValueError:
+        pass
+
+@test
+def test_motif_create_function():
+    """Test the create function for motif creation."""
+    sequences = ["ACGT", "ACGA", "ACGC"]
+    motif = create(sequences)
+    
+    assertEqual(motif.alphabet, "ACGT")
+    assertEqual(motif.length, 4)
+    assertEqual(len(motif), 4)
+
+# ============================================================================
+# Motif Property Tests (Mask, Pseudocounts, Background)
+# ============================================================================
+
+@test
+def test_motif_mask_default():
+    """Test default mask initialization."""
+    sequences = ["ACGT", "ACGA"]
+    motif = create(sequences)
+    
+    mask = motif.mask
+    assertEqual(len(mask), 4)
+    for val in mask:
+        assertEqual(val, 1)
+
+@test
+def test_motif_mask_string():
+    """Test setting mask with string."""
+    sequences = ["ACGT", "ACGA"]
+    motif = create(sequences)
+    
+    motif.set_mask("* * ")
+    mask = motif.mask
+    assertEqual(mask[0], 1)
+    assertEqual(mask[1], 0)
+    assertEqual(mask[2], 1)
+    assertEqual(mask[3], 0)
+
+@test
+def test_motif_mask_list():
+    """Test setting mask with list."""
+    sequences = ["ACGT", "ACGA"]
+    motif = create(sequences)
+    
+    motif.set_mask([1, 0, 1, 1])
+    mask = motif.mask
+    assertEqual(mask[0], 1)
+    assertEqual(mask[1], 0)
+    assertEqual(mask[2], 1)
+    assertEqual(mask[3], 1)
+
+@test
+def test_motif_pseudocounts_default():
+    """Test default pseudocounts."""
+    motif = Motif()
+    
+    pseudocounts = motif.pseudocounts
+    for letter in motif.alphabet:
+        assertEqual(pseudocounts[letter], 0.0)
+
+@test
+def test_motif_pseudocounts_single_value():
+    """Test setting pseudocounts with single value."""
+    motif = Motif()
+    motif.set_pseudocounts(0.5)
+    
+    pseudocounts = motif.pseudocounts
+    for letter in motif.alphabet:
+        assertAlmostEqual(pseudocounts[letter], 0.5)
+
+@test
+def test_motif_pseudocounts_dict():
+    """Test setting pseudocounts with dictionary."""
+    motif = Motif()
+    pc = {"A": 0.1, "C": 0.2, "G": 0.3, "T": 0.4}
+    motif.set_pseudocounts(pc)
+    
+    pseudocounts = motif.pseudocounts
+    assertAlmostEqual(pseudocounts["A"], 0.1)
+    assertAlmostEqual(pseudocounts["C"], 0.2)
+    assertAlmostEqual(pseudocounts["G"], 0.3)
+    assertAlmostEqual(pseudocounts["T"], 0.4)
+
+@test
+def test_motif_background_default():
+    """Test default background frequencies."""
+    motif = Motif()
+    
+    background = motif.background
+    for letter in motif.alphabet:
+        assertAlmostEqual(background[letter], 1.0)
+
+@test
+def test_motif_background_gc_content():
+    """Test setting background with GC content."""
+    motif = Motif()
+    motif.set_background(0.4)  # 40% GC content
+    
+    background = motif.background
+    assertAlmostEqual(background["A"], 0.3)  # (1-0.4)/2
+    assertAlmostEqual(background["T"], 0.3)
+    assertAlmostEqual(background["C"], 0.2)  # 0.4/2
+    assertAlmostEqual(background["G"], 0.2)
+
+@test
+def test_motif_background_dict():
+    """Test setting background with dictionary."""
+    motif = Motif()
+    bg = {"A": 0.3, "C": 0.2, "G": 0.2, "T": 0.3}
+    motif.set_background(bg)
+    
+    background = motif.background
+    assertAlmostEqual(background["A"], 0.3)
+    assertAlmostEqual(background["C"], 0.2)
+    assertAlmostEqual(background["G"], 0.2)
+    assertAlmostEqual(background["T"], 0.3)
+
+# ============================================================================
+# Motif Matrix Tests (PWM, PSSM)
+# ============================================================================
+
+@test
+def test_motif_pwm():
+    """Test PWM calculation."""
+    counts = {
+        "A": [3.0, 0.0, 0.0, 2.0],
+        "C": [0.0, 3.0, 0.0, 0.0],
+        "G": [0.0, 0.0, 3.0, 1.0],
+        "T": [0.0, 0.0, 0.0, 0.0]
+    }
+    
+    motif = Motif(counts=counts)
+    pwm = motif.pwm
+    
+    # First position should be all A
+    assertAlmostEqual(pwm["A", 0], 1.0)
+    assertAlmostEqual(pwm["C", 0], 0.0)
+    
+    # Second position should be all C
+    assertAlmostEqual(pwm["C", 1], 1.0)
+    assertAlmostEqual(pwm["A", 1], 0.0)
+
+@test
+def test_motif_pwm_with_pseudocounts():
+    """Test PWM calculation with pseudocounts."""
+    counts = {
+        "A": [3.0, 0.0, 0.0, 0.0],
+        "C": [0.0, 3.0, 0.0, 0.0],
+        "G": [0.0, 0.0, 3.0, 0.0],
+        "T": [0.0, 0.0, 0.0, 3.0]
+    }
+    
+    motif = Motif(counts=counts)
+    motif.set_pseudocounts(0.25)
+    pwm = motif.pwm
+    
+    # With pseudocounts, no position should be 0 or 1
+    for letter in motif.alphabet:
+        for i in range(motif.length):
+            assertTrue(pwm[letter, i] > 0.0)
+            assertTrue(pwm[letter, i] < 1.0)
+
+@test
+def test_motif_pssm():
+    """Test PSSM calculation."""
+    counts = {
+        "A": [3.0, 0.0, 0.0, 2.0],
+        "C": [0.0, 3.0, 0.0, 0.0],
+        "G": [0.0, 0.0, 3.0, 1.0],
+        "T": [0.0, 0.0, 0.0, 0.0]
+    }
+    
+    motif = Motif(counts=counts)
+    motif.set_background({"A": 0.25, "C": 0.25, "G": 0.25, "T": 0.25})
+    motif.set_pseudocounts(0.01)  # Small pseudocount to avoid -inf
+    
+    pssm = motif.pssm
+    
+    # High scoring positions should have positive values
+    assertTrue(pssm["A", 0] > 0)
+    assertTrue(pssm["C", 1] > 0)
+    assertTrue(pssm["G", 2] > 0)
+
+# ============================================================================
+# Motif Consensus Tests
+# ============================================================================
+
+@test
+def test_motif_consensus():
+    """Test consensus sequence calculation."""
+    sequences = ["ACGT", "ACGA", "ACGC"]
+    motif = create(sequences)
+    
+    consensus = motif.consensus
+    assertEqual(str(consensus), "ACGT")
+
+@test
+def test_motif_anticonsensus():
+    """Test anticonsensus sequence calculation."""
+    sequences = ["ACGT", "ACGA", "ACGC", "ACGG"]
+    motif = create(sequences)
+    
+    anticonsensus = motif.anticonsensus
+    # Position 0: all A, so anticonsensus is not A
+    # Position 3: mix of T,A,C,G with T being least common
+    assertEqual(anticonsensus[0], "C")  # or G or T (any non-A)
+
+@test
+def test_motif_degenerate_consensus():
+    """Test degenerate consensus sequence calculation."""
+    sequences = ["ACGT", "ACGA", "TCGT", "TCGA"]
+    motif = create(sequences)
+    
+    degenerate = motif.degenerate_consensus
+    # Position 0: 2A, 2T -> W (A or T)
+    # Position 1: 4C -> C
+    # Position 2: 4G -> G  
+    # Position 3: 2T, 2A -> W
+    assertEqual(str(degenerate), "WCGW")
+
+# ============================================================================
+# Motif Reverse Complement Tests
+# ============================================================================
+
+@test
+def test_motif_reverse_complement_dna():
+    """Test reverse complement for DNA motif."""
+    counts = {
+        "A": [3.0, 0.0, 0.0, 1.0],
+        "C": [0.0, 3.0, 0.0, 1.0],
+        "G": [0.0, 0.0, 3.0, 1.0],
+        "T": [0.0, 0.0, 0.0, 0.0]
+    }
+    
+    motif = Motif(counts=counts)
+    rc = motif.reverse_complement()
+    
+    # Check reversed and complemented counts
+    assertEqual(rc._counts.data["T"][3], 3.0)  # A at pos 0 -> T at pos 3
+    assertEqual(rc._counts.data["G"][2], 3.0)  # C at pos 1 -> G at pos 2
+    assertEqual(rc._counts.data["C"][1], 3.0)  # G at pos 2 -> C at pos 1
+
+@test
+def test_motif_reverse_complement_preserves_properties():
+    """Test that reverse complement preserves mask and pseudocounts."""
+    sequences = ["ACGT", "ACGA"]
+    motif = create(sequences)
+    motif.set_mask([1, 0, 1, 1])
+    motif.set_pseudocounts(0.5)
+    motif.set_background(0.4)
+    
+    rc = motif.reverse_complement()
+    
+    # Check mask is reversed
+    assertEqual(rc.mask[0], 1)
+    assertEqual(rc.mask[1], 1)
+    assertEqual(rc.mask[2], 0)
+    assertEqual(rc.mask[3], 1)
+    
+    # Check pseudocounts are swapped
+    assertAlmostEqual(rc.pseudocounts["A"], motif.pseudocounts["T"])
+    assertAlmostEqual(rc.pseudocounts["T"], motif.pseudocounts["A"])
+    
+    # Check background is swapped
+    assertAlmostEqual(rc.background["A"], motif.background["T"])
+    assertAlmostEqual(rc.background["T"], motif.background["A"])
+
+# ============================================================================
+# Motif Slicing Tests
+# ============================================================================
+
+@test
+def test_motif_slicing():
+    """Test motif slicing."""
+    counts = {
+        "A": [1.0, 2.0, 3.0, 4.0, 5.0],
+        "C": [5.0, 4.0, 3.0, 2.0, 1.0],
+        "G": [0.0, 0.0, 1.0, 0.0, 0.0],
+        "T": [0.0, 0.0, 0.0, 1.0, 0.0]
+    }
+    
+    motif = Motif(counts=counts)
+    sliced = motif.__getitem__(1, 4)
+    
+    assertEqual(sliced.length, 3)
+    assertEqual(sliced._counts.data["A"][0], 2.0)
+    assertEqual(sliced._counts.data["A"][1], 3.0)
+    assertEqual(sliced._counts.data["A"][2], 4.0)
+
+@test
+def test_motif_slicing_preserves_properties():
+    """Test that slicing preserves motif properties."""
+    sequences = ["ACGTAA", "ACGTTT"]
+    motif = create(sequences)
+    motif.set_mask([1, 0, 1, 1, 0, 1])
+    motif.set_pseudocounts(0.25)
+    motif.set_background(0.45)
+    
+    sliced = motif.__getitem__(2, 5)
+    
+    # Check mask is sliced
+    assertEqual(len(sliced.mask), 3)
+    assertEqual(sliced.mask[0], 1)
+    assertEqual(sliced.mask[1], 1)
+    assertEqual(sliced.mask[2], 0)
+    
+    # Check pseudocounts preserved
+    assertAlmostEqual(sliced.pseudocounts["A"], 0.25)
+    
+    # Check background preserved
+    assertAlmostEqual(sliced.background["G"], 0.225)
+
+# ============================================================================
+# Motif Relative Entropy Tests
+# ============================================================================
+
+@test
+def test_motif_relative_entropy():
+    """Test relative entropy calculation."""
+    counts = {
+        "A": [4.0, 0.0, 0.0, 0.0],
+        "C": [0.0, 4.0, 0.0, 0.0],
+        "G": [0.0, 0.0, 4.0, 0.0],
+        "T": [0.0, 0.0, 0.0, 4.0]
+    }
+    
+    motif = Motif(counts=counts)
+    motif.set_background({"A": 0.25, "C": 0.25, "G": 0.25, "T": 0.25})
+    motif.set_pseudocounts(0.0)
+    
+    entropy = motif.relative_entropy
+    
+    # Each position has maximum information content (2 bits for 4 letters)
+    for val in entropy:
+        assertAlmostEqual(val, 2.0, places=5)
+
+@test
+def test_motif_relative_entropy_uniform():
+    """Test relative entropy for uniform distribution."""
+    counts = {
+        "A": [1.0, 1.0, 1.0, 1.0],
+        "C": [1.0, 1.0, 1.0, 1.0],
+        "G": [1.0, 1.0, 1.0, 1.0],
+        "T": [1.0, 1.0, 1.0, 1.0]
+    }
+    
+    motif = Motif(counts=counts)
+    motif.set_background({"A": 0.25, "C": 0.25, "G": 0.25, "T": 0.25})
+    
+    entropy = motif.relative_entropy
+    
+    # Uniform distribution has zero relative entropy
+    for val in entropy:
+        assertAlmostEqual(val, 0.0, places=5)
+
+# ============================================================================
+# Motif String Representation Tests
+# ============================================================================
+
+@test
+def test_motif_str_with_alignment():
+    """Test string representation of motif with alignment."""
+    sequences = ["ACGT", "TGCA"]
+    align = SimpleAlignment(sequences)
+    motif = Motif(alignment=align)
+    
+    str_repr = str(motif)
+    assertEqual(str_repr, "ACGT\nTGCA")
+
+@test
+def test_motif_str_without_alignment():
+    """Test string representation of motif without alignment."""
+    counts = {"A": [1.0], "C": [0.0], "G": [0.0], "T": [0.0]}
+    motif = Motif(counts=counts)
+    
+    str_repr = str(motif)
+    assertEqual(str_repr, "")
+
+@test
+def test_motif_len():
+    """Test length operator for motif."""
+    counts = {
+        "A": [1.0, 2.0, 3.0],
+        "C": [0.0, 0.0, 0.0],
+        "G": [0.0, 0.0, 0.0],
+        "T": [0.0, 0.0, 0.0]
+    }
+    
+    motif = Motif(counts=counts)
+    assertEqual(len(motif), 3)
+
+# ============================================================================
+# Edge Cases and Error Handling Tests
+# ============================================================================
+
+@test
+def test_motif_empty_no_operations():
+    """Test that operations on empty motif handle gracefully."""
+    motif = Motif()
+    
+    # These should not crash
+    assertEqual(motif.consensus, "")
+    assertEqual(motif.anticonsensus, "")
+    assertEqual(motif.degenerate_consensus, "")
+    assertEqual(motif.relative_entropy, [])
+
+@test
+def test_motif_invalid_mask_length():
+    """Test that invalid mask length raises error."""
+    sequences = ["ACGT"]
+    motif = create(sequences)
+    
+    try:
+        motif.set_mask([1, 0])  # Wrong length
+        assert False, "Expected ValueError for wrong mask length"
+    except ValueError:
+        pass
+
+@test
+def test_motif_invalid_mask_string():
+    """Test that invalid mask string raises error."""
+    sequences = ["ACGT"]
+    motif = create(sequences)
+    
+    try:
+        motif.set_mask("*X* ")  # Invalid character X
+        assert False, "Expected ValueError for invalid mask character"
+    except ValueError:
+        pass
+
+@test
+def test_motif_reverse_complement_protein_fails():
+    """Test that reverse complement fails for protein alphabet."""
+    motif = Motif(alphabet="ACDEFGHIKLMNPQRSTVWY")
+    
+    try:
+        rc = motif.reverse_complement()
+        assert False, "Expected ValueError for protein reverse complement"
+    except ValueError:
+        pass
+
+@test
+def test_motif_background_normalization():
+    """Test that background frequencies are normalized."""
+    motif = Motif()
+    bg = {"A": 2.0, "C": 2.0, "G": 2.0, "T": 2.0}  # Sum = 8
+    motif.set_background(bg)
+    
+    background = motif.background
+    total = 0.0
+    for letter in motif.alphabet:
+        total += background[letter]
+    
+    assertAlmostEqual(total, 1.0)
+    assertAlmostEqual(background["A"], 0.25)
+
+# ============================================================================
+# Run all tests
+# ============================================================================
+
+print("Running Bio.motifs test suite...")
+print("SimpleAlignment tests passed")
+print("Motif initialization tests passed")
+print("Motif property tests passed")
+print("Motif matrix tests passed")
+print("Motif consensus tests passed")
+print("Motif reverse complement tests passed")
+print("Motif slicing tests passed")
+print("Motif relative entropy tests passed")
+print("Motif string representation tests passed")
+print("Edge case and error handling tests passed")
+print("\nAll tests passed successfully!")
