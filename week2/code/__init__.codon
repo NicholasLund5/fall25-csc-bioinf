@@ -1,0 +1,682 @@
+import math
+from typing import Optional, List, Dict, Tuple
+
+# Import matrix classes from our Codon implementation
+from matrix import FrequencyPositionMatrix, PositionWeightMatrix, PositionSpecificScoringMatrix
+
+# Import dependencies from Python - ALL must use 'from python import' syntax
+from python import Bio.motifs.jaspar as jaspar
+from python import Bio.motifs.transfac as transfac
+from python import Bio.motifs.clusterbuster as clusterbuster
+import minimal
+
+class SimpleAlignment:
+    """Simple alignment class for Codon compatibility"""
+    sequences: List[str]
+    length: int
+    
+    def __init__(self, sequences: List[str]):
+        self.sequences = sequences
+        if len(sequences) > 0:
+            self.length = len(sequences[0])
+            # Verify all sequences have same length
+            for seq in sequences:
+                if len(seq) != self.length:
+                    raise ValueError("All sequences must have the same length")
+        else:
+            self.length = 0
+    
+    def __len__(self) -> int:
+        return len(self.sequences)
+    
+    def __str__(self) -> str:
+        result = ""
+        first = True
+        for seq in self.sequences:
+            if not first:
+                result += "\n"
+            result += seq
+            first = False
+        return result
+    
+    def __getitem__(self, index: int) -> str:
+        return self.sequences[index]
+    
+    def frequencies(self, alphabet: str) -> Dict[str, List[float]]:
+        """Calculate position frequencies for each letter"""
+        freqs = Dict[str, List[float]]()
+        
+        for letter in alphabet:
+            freq_list = List[float]()
+            for pos in range(self.length):
+                count = 0.0
+                for seq in self.sequences:
+                    if pos < len(seq) and seq[pos] == letter:
+                        count += 1.0
+                freq_list.append(count)
+            freqs[letter] = freq_list
+        
+        return freqs
+    
+    def get_slice(self, start: int, stop: int) -> SimpleAlignment:
+        """Get a slice of the alignment"""
+        new_sequences = List[str]()
+        for seq in self.sequences:
+            new_sequences.append(seq[start:stop])
+        return SimpleAlignment(new_sequences)
+    
+    def reverse_complement(self) -> SimpleAlignment:
+        """Return reverse complement of DNA/RNA alignment"""
+        complement_map = Dict[str, str]()
+        complement_map["A"] = "T"
+        complement_map["T"] = "A"
+        complement_map["G"] = "C"
+        complement_map["C"] = "G"
+        complement_map["a"] = "t"
+        complement_map["t"] = "a"
+        complement_map["g"] = "c"
+        complement_map["c"] = "g"
+        complement_map["U"] = "A"
+        complement_map["u"] = "a"
+        
+        new_sequences = List[str]()
+        for seq in self.sequences:
+            rev_seq = seq[::-1]
+            comp_seq = ""
+            for base in rev_seq:
+                if base in complement_map:
+                    comp_seq += complement_map[base]
+                else:
+                    comp_seq += base
+            new_sequences.append(comp_seq)
+        
+        return SimpleAlignment(new_sequences)
+
+class Motif:
+    """A class representing sequence motifs."""
+    
+    name: str
+    alphabet: str
+    length: int
+    _mask: List[int]
+    _pseudocounts: Dict[str, float]
+    _background: Dict[str, float]
+    # Store raw data instead of complex objects
+    _count_data: Dict[str, List[float]]
+    _alignment_sequences: List[str]
+    _has_data: bool
+    
+    def __init__(self, alphabet: str = "ACGT"):
+        """Initialize empty Motif."""
+        self.name = ""
+        self.alphabet = alphabet
+        self.length = 0
+        self._mask = List[int]()
+        
+        # Initialize with empty data
+        self._count_data = Dict[str, List[float]]()
+        self._alignment_sequences = List[str]()
+        self._has_data = False
+        
+        # Initialize pseudocounts and background
+        self._pseudocounts = Dict[str, float]()
+        self._background = Dict[str, float]()
+        
+        for letter in alphabet:
+            self._pseudocounts[letter] = 0.0
+            self._background[letter] = 1.0
+    
+    def _init_with_counts(self, counts: Dict[str, List[float]]):
+        """Initialize with counts data."""
+        self._count_data = counts
+        self._has_data = True
+        # Get length from first letter's data
+        for letter in self.alphabet:
+            self.length = len(counts[letter])
+            break
+        # Reinitialize mask
+        self._mask = List[int]()
+        for i in range(self.length):
+            self._mask.append(1)
+
+    def _init_with_alignment(self, alignment: SimpleAlignment):
+        """Initialize with alignment data."""
+        self._alignment_sequences = alignment.sequences
+        self.length = alignment.length
+        frequencies = alignment.frequencies(self.alphabet)
+        
+        # Ensure all letters have frequencies
+        for letter in self.alphabet:
+            if letter not in frequencies:
+                zero_freqs = List[float]()
+                for i in range(self.length):
+                    zero_freqs.append(0.0)
+                frequencies[letter] = zero_freqs
+        
+        self._count_data = frequencies
+        self._has_data = True
+        # Reinitialize mask
+        self._mask = List[int]()
+        for i in range(self.length):
+            self._mask.append(1)
+    
+    @property
+    def mask(self) -> List[int]:
+        """Get the mask."""
+        return self._mask
+    
+    def set_mask(self, mask):
+        """Set the mask for the motif."""
+        if self.length == 0:
+            self._mask = List[int]()
+        elif mask is None:
+            self._mask = List[int]()
+            for i in range(self.length):
+                self._mask.append(1)
+        elif isinstance(mask, str):
+            if len(mask) != self.length:
+                raise ValueError("Mask length does not match motif length")
+            self._mask = List[int]()
+            for char in mask:
+                if char == "*":
+                    self._mask.append(1)
+                elif char == " ":
+                    self._mask.append(0)
+                else:
+                    raise ValueError("Mask should contain only '*' or ' '")
+        else:
+            # Assume it's a list or tuple of int-like values
+            if len(mask) != self.length:
+                raise ValueError("Mask length does not match motif length")
+            self._mask = List[int]()
+            for val in mask:
+                if val:
+                    self._mask.append(1)
+                else:
+                    self._mask.append(0)
+    
+    @property 
+    def pseudocounts(self) -> Dict[str, float]:
+        """Get pseudocounts."""
+        return self._pseudocounts
+    
+    def set_pseudocounts(self, value):
+        """Set pseudocounts for the motif."""
+        self._pseudocounts = Dict[str, float]()
+        
+        if isinstance(value, dict):
+            # Handle Python dict
+            for letter in self.alphabet:
+                if letter in value:
+                    self._pseudocounts[letter] = float(value[letter])
+                else:
+                    self._pseudocounts[letter] = 0.0
+        elif isinstance(value, Dict[str, float]):
+            # Handle Codon Dict
+            for letter in self.alphabet:
+                if letter in value:
+                    self._pseudocounts[letter] = float(value[letter])
+                else:
+                    self._pseudocounts[letter] = 0.0
+        elif value is None:
+            for letter in self.alphabet:
+                self._pseudocounts[letter] = 0.0
+        else:
+            # Single value for all letters
+            val = float(value)
+            for letter in self.alphabet:
+                self._pseudocounts[letter] = val
+    
+    @property
+    def background(self) -> Dict[str, float]:
+        """Get background frequencies."""
+        return self._background
+    
+    def set_background(self, value):
+        """Set background frequencies for the motif."""
+        if isinstance(value, dict):
+            # Handle Python dict
+            self._background = Dict[str, float]()
+            for letter in self.alphabet:
+                if letter in value:
+                    self._background[letter] = float(value[letter])
+                else:
+                    self._background[letter] = 1.0
+        elif isinstance(value, Dict[str, float]):
+            # Handle Codon Dict
+            self._background = Dict[str, float]()
+            for letter in self.alphabet:
+                if letter in value:
+                    self._background[letter] = float(value[letter])
+                else:
+                    self._background[letter] = 1.0
+        elif value is None:
+            self._background = Dict[str, float]()
+            for letter in self.alphabet:
+                self._background[letter] = 1.0
+        else:
+            # Interpret as GC content for DNA/RNA
+            if not self._has_dna_alphabet() and not self._has_rna_alphabet():
+                raise ValueError("Single value background only works for DNA/RNA motifs")
+            
+            gc_content = float(value)
+            self._background = Dict[str, float]()
+            
+            if self._has_dna_alphabet():
+                T_or_U = "T"
+            else:
+                T_or_U = "U"
+            
+            self._background["A"] = (1.0 - gc_content) / 2.0
+            self._background["C"] = gc_content / 2.0
+            self._background["G"] = gc_content / 2.0
+            self._background[T_or_U] = (1.0 - gc_content) / 2.0
+        
+        # Normalize
+        total = 0.0
+        for letter in self.alphabet:
+            total += self._background[letter]
+        
+        if total > 0:
+            for letter in self.alphabet:
+                self._background[letter] /= total
+    
+    @property
+    def consensus(self) -> str:
+        """Return the consensus sequence."""
+        if not self._has_data:
+            return ""
+        
+        sequence = ""
+        for i in range(self.length):
+            maximum = -math.inf
+            sequence_letter = ""
+            # Try letters in the order they appear in sequences, not alphabetically
+            for seq_idx, seq in enumerate(self._alignment_sequences):
+                if i < len(seq):
+                    letter = seq[i]
+                    count = self._count_data[letter][i]
+                    if count > maximum:
+                        maximum = count
+                        sequence_letter = letter
+                    elif count == maximum and sequence_letter == "":
+                        # First occurrence wins in case of tie
+                        sequence_letter = letter
+            
+            # Fallback to alphabetical if no alignment sequences
+            if sequence_letter == "":
+                for letter in self.alphabet:
+                    count = self._count_data[letter][i]
+                    if count > maximum:
+                        maximum = count
+                        sequence_letter = letter
+            
+            sequence += sequence_letter
+        return sequence
+
+    @property
+    def anticonsensus(self) -> str:
+        """Return the anticonsensus sequence."""
+        if not self._has_data:
+            return ""
+        
+        sequence = ""
+        for i in range(self.length):
+            minimum = math.inf
+            sequence_letter = ""
+            for letter in self.alphabet:
+                count = self._count_data[letter][i]
+                if count < minimum:
+                    minimum = count
+                    sequence_letter = letter
+            sequence += sequence_letter
+        return sequence
+
+    @property
+    def degenerate_consensus(self) -> str:
+        """Return the degenerate consensus sequence."""
+        if not self._has_data:
+            return ""
+        
+        degenerate_nucleotide = {
+            "A": "A", "C": "C", "G": "G", "T": "T", "U": "U",
+            "AC": "M", "AG": "R", "AT": "W", "AU": "W", "CG": "S", 
+            "CT": "Y", "CU": "Y", "GT": "K", "GU": "K",
+            "ACG": "V", "ACT": "H", "ACU": "H", "AGT": "D", 
+            "AGU": "D", "CGT": "B", "CGU": "B",
+            "ACGT": "N", "ACGU": "N",
+        }
+        
+        sequence = ""
+        for i in range(self.length):
+            nucleotides_counts = []
+            for nucleotide in self.alphabet:
+                nucleotides_counts.append((self._count_data[nucleotide][i], nucleotide))
+            nucleotides_counts.sort(reverse=True)
+            
+            nucleotides = [nc[1] for nc in nucleotides_counts]
+            counts = [nc[0] for nc in nucleotides_counts]
+            
+            if counts[0] > sum(counts[1:]) and counts[0] > 2 * counts[1]:
+                key = nucleotides[0]
+            elif 4 * sum(counts[:2]) > 3 * sum(counts):
+                key = "".join(sorted(nucleotides[:2]))
+            elif counts[3] == 0:
+                key = "".join(sorted(nucleotides[:3]))
+            else:
+                key = "ACGT"
+            
+            if key in degenerate_nucleotide:
+                nucleotide = degenerate_nucleotide[key]
+            else:
+                nucleotide = key
+            sequence += nucleotide
+        return sequence
+
+    def __len__(self) -> int:
+        """Return the length of the motif."""
+        return self.length
+    
+    def __str__(self) -> str:
+        """Return string representation of the motif."""
+        text = ""
+        if len(self._alignment_sequences) > 0:
+            align = SimpleAlignment(self._alignment_sequences)
+            text += str(align)
+        return text
+    
+    def __getitem__(self, start: int, stop: int) -> Motif:
+        """Return a new Motif object for the positions from start to stop."""
+        alphabet = self.alphabet
+        
+        if len(self._alignment_sequences) == 0:
+            if not self._has_data:
+                motif = Motif(alphabet)
+            else:
+                counts = Dict[str, List[float]]()
+                for letter in alphabet:
+                    counts[letter] = self._count_data[letter][start:stop]
+                motif = _create_from_counts(alphabet, counts)
+        else:
+            align = SimpleAlignment(self._alignment_sequences)
+            sliced_alignment = align.get_slice(start, stop)
+            motif = Motif(alphabet)
+            motif._init_with_alignment(sliced_alignment)
+        
+        # Copy mask for the slice
+        new_mask = List[int]()
+        for i in range(start, min(stop, len(self._mask))):
+            new_mask.append(self._mask[i])
+        motif._mask = new_mask
+        
+        # Copy pseudocounts and background
+        motif._pseudocounts = Dict[str, float]()
+        motif._background = Dict[str, float]()
+        for letter in alphabet:
+            motif._pseudocounts[letter] = self._pseudocounts[letter]
+            motif._background[letter] = self._background[letter]
+        
+        return motif
+    
+    def _has_dna_alphabet(self) -> bool:
+        """Check if alphabet is DNA."""
+        if len(self.alphabet) != 4:
+            return False
+        for letter in self.alphabet:
+            if letter != "A" and letter != "C" and letter != "G" and letter != "T":
+                return False
+        return True
+    
+    def _has_rna_alphabet(self) -> bool:
+        """Check if alphabet is RNA."""
+        if len(self.alphabet) != 4:
+            return False
+        for letter in self.alphabet:
+            if letter != "A" and letter != "C" and letter != "G" and letter != "U":
+                return False
+        return True
+    
+    @property
+    def pwm(self) -> PositionWeightMatrix:
+        """Calculate and return the position weight matrix."""
+        if not self._has_data:
+            raise ValueError("Cannot calculate PWM without counts")
+        counts_matrix = FrequencyPositionMatrix(self.alphabet, self._count_data)
+        return counts_matrix.normalize(self._pseudocounts)
+    
+    @property
+    def pssm(self) -> PositionSpecificScoringMatrix:
+        """Calculate and return the position specific scoring matrix."""
+        pwm = self.pwm
+        return pwm.log_odds(self._background)
+    
+    def reverse_complement(self) -> Motif:
+        """Return the reverse complement of the motif."""
+        if not self._has_dna_alphabet() and not self._has_rna_alphabet():
+            raise ValueError("Reverse complement only works for DNA/RNA motifs")
+        
+        if self._has_dna_alphabet():
+            T_or_U = "T"
+        else:
+            T_or_U = "U"
+        
+        if len(self._alignment_sequences) > 0:
+            align = SimpleAlignment(self._alignment_sequences)
+            rc_alignment = align.reverse_complement()
+            if T_or_U == "U":
+                # Replace T with U in sequences
+                new_sequences = List[str]()
+                for seq in rc_alignment.sequences:
+                    new_seq = ""
+                    for char in seq:
+                        if char == "T":
+                            new_seq += "U"
+                        else:
+                            new_seq += char
+                    new_sequences.append(new_seq)
+                rc_alignment = SimpleAlignment(new_sequences)
+            res = Motif(self.alphabet)
+            res._init_with_alignment(rc_alignment)
+        else:
+            # Reverse complement counts
+            if not self._has_data:
+                res = Motif(self.alphabet)
+            else:
+                counts = Dict[str, List[float]]()
+                counts["A"] = self._count_data[T_or_U][::-1]
+                counts["C"] = self._count_data["G"][::-1]
+                counts["G"] = self._count_data["C"][::-1]
+                counts[T_or_U] = self._count_data["A"][::-1]
+                res = _create_from_counts(self.alphabet, counts)
+            
+        # Reverse mask
+        reversed_mask = List[int]()
+        for i in range(len(self._mask) - 1, -1, -1):
+            reversed_mask.append(self._mask[i])
+        res._mask = reversed_mask
+        
+        # Swap background and pseudocounts
+        res._background = Dict[str, float]()
+        res._pseudocounts = Dict[str, float]()
+        
+        res._background["A"] = self._background[T_or_U]
+        res._background["C"] = self._background["G"]
+        res._background["G"] = self._background["C"]
+        res._background[T_or_U] = self._background["A"]
+        
+        res._pseudocounts["A"] = self._pseudocounts[T_or_U]
+        res._pseudocounts["C"] = self._pseudocounts["G"]
+        res._pseudocounts["G"] = self._pseudocounts["C"]
+        res._pseudocounts[T_or_U] = self._pseudocounts["A"]
+        
+        return res
+    
+    @property
+    def relative_entropy(self) -> List[float]:
+        """Calculate relative entropy for each position."""
+        if not self._has_data:
+            values = List[float]()
+            return values
+        
+        values = List[float]()
+        for i in range(self.length):
+            entropy = 0.0
+            total = 0.0
+            
+            # Calculate total with pseudocounts
+            for letter in self.alphabet:
+                total += self._count_data[letter][i] + self._pseudocounts[letter]
+            
+            if total > 0:
+                for letter in self.alphabet:
+                    freq = self._count_data[letter][i] + self._pseudocounts[letter]
+                    if freq > 0:
+                        prob = freq / total
+                        bg = self._background[letter]
+                        if bg > 0:
+                            entropy += prob * math.log2(prob / bg)
+            
+            values.append(entropy)
+        
+        return values
+        
+    def format(self, format_spec: str) -> str:
+        """Format the motif in a specific format."""
+        # Convert to Python motif and use BioPython formatters
+        py_motif = _convert_codon_motif(self)
+        return py_motif.format(format_spec)
+
+# Now we can define functions that use Motif class
+def create(instances: List[str], alphabet: str = "ACGT") -> Motif:
+    """Create a Motif object from sequences."""
+    alignment = SimpleAlignment(instances)
+    motif = Motif(alphabet)
+    motif._init_with_alignment(alignment)
+    return motif
+
+def _create_from_counts(alphabet: str, counts: Dict[str, List[float]]) -> Motif:
+    """Create a Motif object from counts."""
+    motif = Motif(alphabet)
+    motif._init_with_counts(counts)
+    return motif
+
+def read(handle, fmt: str, strict: bool = True) -> Motif:
+    """Read a motif from a handle using the specified file-format.
+    
+    This function reads exactly one motif from the file.
+    For files with multiple motifs, use parse() instead.
+    """
+    fmt_lower = fmt.lower()
+    
+    # Use Python imports for format-specific parsing
+    if fmt_lower == "minimal":
+        motifs = minimal.read(handle)
+    elif fmt_lower == "pfm" or fmt_lower == "sites" or fmt_lower == "jaspar":
+        motifs = jaspar.read(handle, fmt_lower)
+    elif fmt_lower == "transfac":
+        motifs = transfac.read(handle, strict)
+    elif fmt_lower == "clusterbuster":
+        motifs = clusterbuster.read(handle)
+    else:
+        raise ValueError("Unknown format " + fmt)
+    
+    if len(motifs) == 0:
+        raise ValueError("No motifs found in handle")
+    if len(motifs) > 1:
+        raise ValueError("More than one motif found in handle")
+    
+    # Convert Python motif to Codon Motif
+    py_motif = motifs[0]
+    return _convert_python_motif(py_motif)
+
+def parse(handle, fmt: str, strict: bool = True) -> List[Motif]:
+    """Parse an output file from a motif finding program.
+    
+    Returns a list of Motif objects.
+    """
+    fmt_lower = fmt.lower()
+    
+    # Use Python imports for format-specific parsing
+    if fmt_lower == "minimal":
+        py_motifs = minimal.read(handle)
+    elif fmt_lower == "pfm" or fmt_lower == "sites" or fmt_lower == "jaspar":
+        py_motifs = jaspar.read(handle, fmt_lower)
+    elif fmt_lower == "transfac":
+        py_motifs = transfac.read(handle, strict)
+    elif fmt_lower == "clusterbuster":
+        py_motifs = clusterbuster.read(handle)
+    else:
+        raise ValueError("Unknown format " + fmt)
+    
+    # Convert Python motifs to Codon Motifs
+    result = List[Motif]()
+    for py_motif in py_motifs:
+        result.append(_convert_python_motif(py_motif))
+    
+    return result
+
+def _convert_python_motif(py_motif) -> Motif:
+    """Convert a Python BioPython motif to Codon Motif"""
+    # Extract counts from Python motif
+    alphabet = str(py_motif.alphabet)
+    
+    if hasattr(py_motif, 'counts') and py_motif.counts is not None:
+        counts = Dict[str, List[float]]()
+        for letter in alphabet:
+            letter_counts = List[float]()
+            for val in py_motif.counts[letter]:
+                letter_counts.append(float(val))
+            counts[letter] = letter_counts
+        motif = _create_from_counts(alphabet, counts)
+    elif hasattr(py_motif, 'alignment') and py_motif.alignment is not None:
+        sequences = List[str]()
+        for seq in py_motif.alignment:
+            sequences.append(str(seq))
+        alignment = SimpleAlignment(sequences)
+        motif = Motif(alphabet)
+        motif._init_with_alignment(alignment)
+    else:
+        motif = Motif(alphabet)
+    
+    # Copy other attributes
+    if hasattr(py_motif, 'name'):
+        motif.name = str(py_motif.name)
+    
+    return motif
+
+def write(motifs: List[Motif], fmt: str) -> str:
+    """Return a string representation of motifs in the given format."""
+    fmt_lower = fmt.lower()
+    
+    # Convert Codon motifs to Python format for writing
+    py_motifs = []
+    for motif in motifs:
+        py_motif = _convert_codon_motif(motif)
+        py_motifs.append(py_motif)
+    
+    if fmt_lower == "pfm" or fmt_lower == "jaspar":
+        return jaspar.write(py_motifs, fmt_lower)
+    elif fmt_lower == "transfac":
+        return transfac.write(py_motifs)
+    elif fmt_lower == "clusterbuster":
+        return clusterbuster.write(py_motifs)
+    else:
+        raise ValueError("Unknown format type " + fmt)
+
+def _convert_codon_motif(motif: Motif):
+    """Convert a Codon Motif to Python BioPython motif"""
+    from python import Bio.motifs as biomot
+    
+    # Create Python motif with counts
+    if motif._has_data:
+        py_counts = {}
+        for letter in motif.alphabet:
+            py_counts[letter] = motif._count_data[letter]
+        py_motif = biomot.Motif(alphabet=motif.alphabet, counts=py_counts)
+    elif len(motif._alignment_sequences) > 0:
+        py_motif = biomot.create(motif._alignment_sequences, motif.alphabet)
+    else:
+        py_motif = biomot.Motif(alphabet=motif.alphabet)
+    
+    py_motif.name = motif.name
+    return py_motif

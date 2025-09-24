@@ -1,0 +1,302 @@
+from matrix import FrequencyPositionMatrix
+from typing import Optional, Tuple
+
+class Motif:
+    """Minimal motif class for MEME format compatibility."""
+    
+    def __init__(self, alphabet: str, counts: Dict[str, List[int]]):
+        """Initialize motif with alphabet and count matrix."""
+        self.alphabet = alphabet
+        
+        float_counts = Dict[str, List[float]]()
+        for letter in alphabet:
+            float_list = List[float]()
+            for count in counts[letter]:
+                float_list.append(float(count))
+            float_counts[letter] = float_list
+        
+        self.counts = FrequencyPositionMatrix(alphabet, float_counts)
+        self.background = Dict[str, float]()
+        self.length = self.counts.length
+        self.num_occurrences = 0
+        self.evalue = 0.0
+        self.name = ""
+
+
+class Record:
+    """Class for holding the results of a minimal MEME run."""
+    
+    def __init__(self):
+        """Initialize record class values."""
+        self.version = ""
+        self.datafile = ""
+        self.command = ""
+        self.alphabet = ""
+        self.background = Dict[str, float]()
+        self.sequences = List[str]()
+        
+        dummy_counts = Dict[str, List[int]]()
+        dummy_counts["A"] = List[int]()
+        dummy_counts["A"].append(1)
+        dummy_motif = Motif("A", dummy_counts)
+        self._motifs = [dummy_motif]
+        self._motifs.clear()
+        
+        self._motif_names = Dict[str, int]()
+        
+    def append(self, motif):
+        """Add a motif to the record."""
+        if len(self._motifs) == 0:
+            self._motifs = [motif]
+        else:
+            temp = list(self._motifs)
+            temp.append(motif)
+            self._motifs = temp
+        
+        index = len(self._motifs) - 1
+        if motif.name:
+            self._motif_names[motif.name] = index
+    
+    def __len__(self) -> int:
+        """Return number of motifs in record."""
+        return len(self._motifs)
+    
+    def __getitem__(self, key):
+        """Return the motif of index key."""
+        if isinstance(key, str):
+            if key in self._motif_names:
+                index = self._motif_names[key]
+                return self._motifs[index]
+            else:
+                raise KeyError("Motif '" + key + "' not found")
+        elif isinstance(key, int):
+            return self._motifs[key]
+        else:
+            raise TypeError("Key must be string or int")
+    
+    def __iter__(self):
+        """Iterate over motifs in record."""
+        return iter(self._motifs)
+
+
+def read(handle) -> Record:
+    """Parse the text output of the MEME program into a Record object.
+    
+    Args:
+        handle: File handle or list of strings containing MEME minimal format
+        
+    Returns:
+        Record object containing parsed motifs
+    """
+    motif_number = 0
+    record = Record()
+    
+    if hasattr(handle, 'readlines'):
+        lines = handle.readlines()
+    elif hasattr(handle, '__iter__'):
+        lines = list(handle)
+    else:
+        raise TypeError("Handle must be file-like or iterable")
+    
+    line_index = 0
+    
+    line_index = _read_version(record, lines, line_index)
+    line_index = _read_alphabet(record, lines, line_index)
+    line_index = _read_background(record, lines, line_index)
+
+    while line_index < len(lines):
+        while line_index < len(lines):
+            line = lines[line_index].strip()
+            if line.startswith("MOTIF"):
+                break
+            line_index += 1
+        else:
+            break
+
+        parts = line.split(maxsplit=1)
+        if len(parts) < 2:
+            raise Exception("Invalid MOTIF line format: " + line)
+        name = parts[1].strip()
+        motif_number += 1
+        line_index += 1
+        
+        if line_index >= len(lines) or not lines[line_index].strip().startswith("letter-probability matrix"):
+            raise Exception(f"Motif {name} missing matrix definition")
+
+        length, num_occurrences, evalue, line_index = _read_motif_statistics(lines, line_index)
+        counts, line_index = _read_lpm(record, lines, line_index, length, num_occurrences)
+        
+        motif = Motif(record.alphabet, counts)
+        for letter in record.background:
+            motif.background[letter] = record.background[letter]
+        motif.length = motif.counts.length
+        motif.num_occurrences = num_occurrences
+        motif.evalue = evalue
+        motif.name = name
+        record.append(motif)
+    return record
+
+
+def _read_version(record: Record, lines: List[str], start_index: int) -> int:
+    """Read MEME version (PRIVATE)."""
+    line_index = start_index
+    while line_index < len(lines):
+        line = lines[line_index].strip()
+        if line.startswith("MEME version"):
+            parts = line.split()
+            if len(parts) >= 3:
+                record.version = parts[2]
+            return line_index + 1
+        line_index += 1
+    
+    raise Exception("Improper input file. File should contain a line starting with 'MEME version'")
+
+
+def _read_alphabet(record: Record, lines: List[str], start_index: int) -> int:
+    """Read alphabet (PRIVATE)."""
+    line_index = start_index
+    while line_index < len(lines):
+        line = lines[line_index].strip()
+        if line.startswith("ALPHABET"):
+            if not line.startswith("ALPHABET= "):
+                raise Exception("Line does not start with 'ALPHABET= ':\n" + line)
+            
+            alphabet_part = line.replace("ALPHABET= ", "")
+            if alphabet_part == "ACGT":
+                record.alphabet = "ACGT"
+            elif alphabet_part == "ACGU":
+                record.alphabet = "ACGU"
+            else:
+                raise Exception("Only parsing of DNA and RNA motifs is implemented")
+            
+            return line_index + 1
+        line_index += 1
+    
+    raise Exception("Unexpected end of stream: Expected to find line starting with 'ALPHABET'")
+
+
+def _read_background(record: Record, lines: List[str], start_index: int) -> int:
+    line_index = start_index
+
+    while line_index < len(lines):
+        line = lines[line_index].strip()
+        if line.startswith("Background letter frequencies"):
+            line_index += 1
+            break
+        line_index += 1
+    else:
+        raise Exception("Improper input file: missing 'Background letter frequencies'")
+
+    while line_index < len(lines):
+        line = lines[line_index].strip()
+        if (not line) or line.startswith("MOTIF") or line.startswith("letter-probability matrix"):
+            break
+
+        parts = line.split()
+        if len(parts) % 2 != 0:
+            raise Exception(f"Invalid background line: {line}")
+
+        for j in range(0, len(parts), 2):
+            letter = parts[j]
+            try:
+                freq = float(parts[j+1])
+                record.background[letter] = freq
+            except ValueError:
+                pass
+
+        line_index += 1
+
+    if len(record.background) == 0:
+        raise Exception("No background frequencies found")
+
+    return line_index
+
+
+
+def _read_motif_statistics(lines: List[str], start_index: int) -> Tuple[Optional[int], int, float, int]:
+    """Read motif statistics (PRIVATE)."""
+    line_index = start_index
+    
+    while line_index < len(lines):
+        line = lines[line_index].strip()
+        if line.startswith("letter-probability matrix:"):
+            break
+        line_index += 1
+    else:
+        raise Exception("Expected to find 'letter-probability matrix:' line")
+    
+    line = lines[line_index]
+    length = None
+    num_occurrences = 20
+    evalue = 0.0
+    
+    if "nsites=" in line:
+        parts = line.split("nsites=")
+        if len(parts) > 1:
+            nsites_part = parts[1].split()[0]
+            try:
+                num_occurrences = int(nsites_part)
+            except ValueError:
+                num_occurrences = 20
+    
+    if "w=" in line:
+        parts = line.split("w=")
+        if len(parts) > 1:
+            w_part = parts[1].split()[0]
+            try:
+                length = int(w_part)
+            except ValueError:
+                length = None
+    
+    if "E=" in line:
+        parts = line.split("E=")
+        if len(parts) > 1:
+            e_part = parts[1].split()[0]
+            try:
+                evalue = float(e_part)
+            except ValueError:
+                evalue = 0.0
+    
+    return length, num_occurrences, evalue, line_index + 1
+
+
+def _read_lpm(record: Record, lines: List[str], start_index: int, 
+             length: Optional[int], num_occurrences: int) -> Tuple[Dict[str, List[int]], int]:
+    """Read letter probability matrix (PRIVATE)."""
+    line_index = start_index
+    counts = Dict[str, List[int]]()
+    
+    for letter in record.alphabet:
+        counts[letter] = List[int]()
+    
+    positions_read = 0
+    while line_index < len(lines):
+        line = lines[line_index].strip()
+        if not line:
+            if length is not None and positions_read < length:
+                line_index += 1
+                continue
+            else:
+                break
+        
+        parts = line.split()
+        if len(parts) != 4:
+            break
+        
+        try:
+            freqs = [float(part) for part in parts]
+        except ValueError:
+            break
+        
+        for i, letter in enumerate(record.alphabet):
+            if i < len(freqs):
+                count = int(round(freqs[i] * num_occurrences))
+                counts[letter].append(count)
+        
+        positions_read += 1
+        line_index += 1
+        
+        if length is not None and positions_read >= length:
+            break
+    
+    return counts, line_index

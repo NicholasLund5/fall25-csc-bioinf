@@ -1,0 +1,838 @@
+
+import math
+from minimal import read, Record, Motif, _read_version, _read_alphabet, _read_background
+from minimal import _read_motif_statistics, _read_lpm
+
+def assertEqual(a, b, msg=""):
+    if msg:
+        assert a == b, msg + ": " + str(a) + " != " + str(b)
+    else:
+        assert a == b, "Expected " + str(a) + " == " + str(b)
+
+def assertAlmostEqual(a, b, places=7, msg=""):
+    tolerance = 1e-7
+    
+    if math.isnan(a) and math.isnan(b):
+        return
+    elif math.isnan(a) or math.isnan(b):
+        if msg:
+            assert False, msg + ": One value is NaN: " + str(a) + " vs " + str(b)
+        else:
+            assert False, "One value is NaN: " + str(a) + " vs " + str(b)
+    
+    diff = abs(a - b)
+    if msg:
+        assert diff <= tolerance, msg + ": |" + str(a) + " - " + str(b) + "| = " + str(diff) + " > " + str(tolerance)
+    else:
+        assert diff <= tolerance, "|" + str(a) + " - " + str(b) + "| = " + str(diff) + " > " + str(tolerance)
+
+def assertRaises(exception_type, func, *args, **kwargs):
+    """Check that calling func(*args, **kwargs) raises an exception"""
+    try:
+        result = func(*args, **kwargs)
+        assert False, "Expected exception to be raised"
+    except Exception as e:
+        pass
+
+def assertTrue(condition, msg=""):
+    if msg:
+        assert condition, msg
+    else:
+        assert condition
+
+def assertFalse(condition, msg=""):
+    if msg:
+        assert not condition, msg
+    else:
+        assert not condition
+
+def assertIn(item, container, msg=""):
+    if msg:
+        assert item in container, msg
+    else:
+        assert item in container, str(item) + " not found in " + str(container)
+
+def assertIsInstance(obj, cls, msg=""):
+    if msg:
+        assert isinstance(obj, cls), msg
+    else:
+        assert isinstance(obj, cls), str(obj) + " is not instance of " + str(cls)
+
+SAMPLE_MEME_DATA = [
+    "MEME version 4.12.0",
+    "",
+    "ALPHABET= ACGT",
+    "",
+    "Background letter frequencies",
+    "A 0.25 C 0.25 G 0.25 T 0.25",
+    "",
+    "MOTIF KRP",
+    "letter-probability matrix: alength= 4 w= 3 nsites= 20 E= 1.1e-05",
+    "0.60 0.10 0.15 0.15",
+    "0.05 0.05 0.85 0.05", 
+    "0.10 0.70 0.10 0.10",
+    "",
+    "MOTIF IFXA",
+    "letter-probability matrix: alength= 4 w= 4 nsites= 15 E= 2.3e-08",
+    "0.80 0.05 0.05 0.10",
+    "0.05 0.05 0.05 0.85",
+    "0.05 0.85 0.05 0.05",
+    "0.70 0.10 0.10 0.10",
+    ""
+]
+
+SAMPLE_RNA_MEME_DATA = [
+    "MEME version 5.0.0",
+    "",
+    "ALPHABET= ACGU",
+    "",
+    "Background letter frequencies",
+    "A 0.3 C 0.2 G 0.2 U 0.3",
+    "",
+    "MOTIF RNA1",
+    "letter-probability matrix: alength= 4 w= 2 nsites= 10 E= 1.0e-10",
+    "0.90 0.05 0.03 0.02",
+    "0.02 0.03 0.05 0.90",
+    ""
+]
+
+MINIMAL_MEME_DATA = [
+    "MEME version 4.12.0",
+    "",
+    "ALPHABET= ACGT",
+    "",
+    "Background letter frequencies",
+    "A 0.25 C 0.25 G 0.25 T 0.25",
+    "",
+    "MOTIF TEST",
+    "letter-probability matrix: alength= 4 w= 1 nsites= 20 E=0.0",
+    "0.50 0.20 0.20 0.10",
+    ""
+]
+
+INVALID_MEME_DATA = [
+    "NOT_MEME version 4.12.0",
+    "ALPHABET= ACGT",
+    "Background letter frequencies",
+    "A 0.25 C 0.25 G 0.25 T 0.25"
+]
+
+# ============================================================================
+# Record Class Tests
+# ============================================================================
+
+@test
+def test_record_init():
+    """Test Record initialization"""
+    record = Record()
+    assertEqual(record.version, "")
+    assertEqual(record.alphabet, "")
+    assertEqual(len(record.background), 0)
+    assertEqual(len(record), 0)
+
+@test
+def test_record_append_and_indexing():
+    """Test Record motif addition and indexing"""
+    record = Record()
+    record.alphabet = "ACGT"
+    
+    counts = {
+        "A": [10, 2],
+        "C": [2, 15],
+        "G": [3, 2],
+        "T": [5, 1]
+    }
+    
+    motif = Motif(record.alphabet, counts)
+    motif.name = "TEST_MOTIF"
+    motif.num_occurrences = 20
+    motif.evalue = 1e-5
+    
+    record.append(motif)
+    
+    assertEqual(len(record), 1)
+    assertEqual(record[0].name, "TEST_MOTIF")
+    assertEqual(record["TEST_MOTIF"].name, "TEST_MOTIF")
+    assertAlmostEqual(record[0].evalue, 1e-5)
+
+@test
+def test_record_invalid_key():
+    """Test Record with invalid keys"""
+    record = Record()
+    record.alphabet = "ACGT"
+    
+    counts = {"A": [10], "C": [2], "G": [3], "T": [5]}
+    motif = Motif(record.alphabet, counts)
+    motif.name = "TEST"
+    record.append(motif)
+    
+    try:
+        motif = record["NONEXISTENT"]
+        assert False, "Should raise KeyError"
+    except KeyError:
+        pass
+    
+    try:
+        motif = record[10]
+        assert False, "Should raise IndexError"
+    except IndexError:
+        pass
+
+@test
+def test_record_iteration():
+    """Test Record iteration"""
+    record = Record()
+    record.alphabet = "ACGT"
+    
+    for i in range(3):
+        counts = {"A": [i+1], "C": [1], "G": [1], "T": [1]}
+        motif = Motif(record.alphabet, counts)
+        motif.name = "MOTIF" + str(i)
+        record.append(motif)
+    
+    assertEqual(len(record), 3)
+    
+    names = []
+    for motif in record:
+        names.append(motif.name)
+    
+    assertEqual(names, ["MOTIF0", "MOTIF1", "MOTIF2"])
+
+# ============================================================================
+# Motif Class Tests
+# ============================================================================
+
+@test
+def test_motif_init():
+    """Test Motif initialization"""
+    counts = {
+        "A": [10, 5, 2],
+        "C": [2, 15, 8],
+        "G": [3, 2, 12],
+        "T": [5, 8, 3]
+    }
+    
+    motif = Motif("ACGT", counts)
+    assertEqual(motif.alphabet, "ACGT")
+    assertEqual(motif.length, 3)
+    assertEqual(motif.name, "")
+    assertEqual(motif.num_occurrences, 0)
+    assertAlmostEqual(motif.evalue, 0.0)
+
+@test
+def test_motif_properties():
+    """Test Motif property setting"""
+    counts = {"A": [8], "C": [2], "G": [1], "T": [1]}
+    
+    motif = Motif("ACGT", counts)
+    motif.name = "TEST_MOTIF"
+    motif.num_occurrences = 12
+    motif.evalue = 1.5e-10
+    motif.background = {"A": 0.3, "C": 0.2, "G": 0.2, "T": 0.3}
+    
+    assertEqual(motif.name, "TEST_MOTIF")
+    assertEqual(motif.num_occurrences, 12)
+    assertAlmostEqual(motif.evalue, 1.5e-10)
+    assertAlmostEqual(motif.background["A"], 0.3)
+    assertAlmostEqual(motif.background["T"], 0.3)
+
+# ============================================================================
+# Main Parser Function Tests
+# ============================================================================
+
+@test
+def test_read_sample_data():
+    """Test reading sample MEME data"""
+    record = read(SAMPLE_MEME_DATA)
+    
+    assertEqual(record.version, "4.12.0")
+    assertEqual(record.alphabet, "ACGT")
+    assertEqual(len(record), 2)
+    
+    assertAlmostEqual(record.background["A"], 0.25)
+    assertAlmostEqual(record.background["C"], 0.25)
+    assertAlmostEqual(record.background["G"], 0.25)
+    assertAlmostEqual(record.background["T"], 0.25)
+
+@test
+def test_read_first_motif():
+    """Test reading first motif from sample data"""
+    record = read(SAMPLE_MEME_DATA)
+    
+    motif = record[0]
+    assertEqual(motif.name, "KRP")
+    assertEqual(motif.length, 3)
+    assertEqual(motif.num_occurrences, 20)
+    assertAlmostEqual(motif.evalue, 1.1e-05)
+
+@test
+def test_read_second_motif():
+    """Test reading second motif from sample data"""
+    record = read(SAMPLE_MEME_DATA)
+    
+    motif = record["IFXA"]
+    assertEqual(motif.name, "IFXA")
+    assertEqual(motif.length, 4)
+    assertEqual(motif.num_occurrences, 15)
+    assertAlmostEqual(motif.evalue, 2.3e-08)
+
+@test
+def test_read_rna_data():
+    """Test reading RNA MEME data"""
+    record = read(SAMPLE_RNA_MEME_DATA)
+    
+    assertEqual(record.version, "5.0.0")
+    assertEqual(record.alphabet, "ACGU")
+    assertEqual(len(record), 1)
+    
+    assertAlmostEqual(record.background["A"], 0.3)
+    assertAlmostEqual(record.background["U"], 0.3)
+    assertAlmostEqual(record.background["C"], 0.2)
+    assertAlmostEqual(record.background["G"], 0.2)
+
+@test
+def test_read_minimal_data():
+    """Test reading minimal MEME format"""
+    record = read(MINIMAL_MEME_DATA)
+
+    assertEqual(record.version, "4.12.0")
+    assertEqual(record.alphabet, "ACGT")
+    assertEqual(len(record), 1)
+
+    motif = record[0]
+    assertEqual(motif.name, "TEST")
+    assertEqual(motif.length, 1)
+    assertEqual(motif.num_occurrences, 20)
+    assertAlmostEqual(motif.evalue, 0.0)
+
+@test
+def test_read_invalid_data():
+    """Test reading invalid MEME data"""
+    try:
+        record = read(INVALID_MEME_DATA)
+        assert False, "Should raise exception for invalid data"
+    except Exception:
+        pass
+
+# ============================================================================
+# Private Function Tests
+# ============================================================================
+
+@test
+def test_read_version():
+    """Test version reading function"""
+    lines = ["MEME version 4.12.0", "other line"]
+    record = Record()
+    
+    next_index = _read_version(record, lines, 0)
+    assertEqual(record.version, "4.12.0")
+    assertEqual(next_index, 1)
+
+@test
+def test_read_version_not_found():
+    """Test version reading with missing version"""
+    lines = ["no version here", "still no version"]
+    record = Record()
+    
+    try:
+        _read_version(record, lines, 0)
+        assert False, "Should raise exception"
+    except Exception:
+        pass
+
+@test
+def test_read_alphabet_dna():
+    """Test DNA alphabet reading"""
+    lines = ["ALPHABET= ACGT", "next line"]
+    record = Record()
+    
+    next_index = _read_alphabet(record, lines, 0)
+    assertEqual(record.alphabet, "ACGT")
+    assertEqual(next_index, 1)
+
+@test
+def test_read_alphabet_rna():
+    """Test RNA alphabet reading"""
+    lines = ["ALPHABET= ACGU", "next line"]
+    record = Record()
+    
+    next_index = _read_alphabet(record, lines, 0)
+    assertEqual(record.alphabet, "ACGU")
+    assertEqual(next_index, 1)
+
+@test
+def test_read_alphabet_invalid():
+    """Test invalid alphabet"""
+    lines = ["ALPHABET= INVALID", "next line"]
+    record = Record()
+    
+    try:
+        _read_alphabet(record, lines, 0)
+        assert False, "Should raise exception for invalid alphabet"
+    except Exception:
+        pass
+
+@test
+def test_read_background():
+    """Test background frequency reading"""
+    lines = [
+        "Background letter frequencies",
+        "A 0.3 C 0.2 G 0.2 T 0.3",
+        "",
+        "next section"
+    ]
+    record = Record()
+    record.alphabet = "ACGT"
+    
+    next_index = _read_background(record, lines, 0)
+    assertAlmostEqual(record.background["A"], 0.3)
+    assertAlmostEqual(record.background["C"], 0.2)
+    assertAlmostEqual(record.background["G"], 0.2)
+    assertAlmostEqual(record.background["T"], 0.3)
+
+@test
+def test_read_motif_statistics_full():
+    """Test reading motif statistics with all parameters"""
+    lines = [
+        "letter-probability matrix: alength= 4 w= 5 nsites= 25 E= 1.5e-10",
+        "next line"
+    ]
+    
+    length, num_occurrences, evalue, next_index = _read_motif_statistics(lines, 0)
+    assertEqual(length, 5)
+    assertEqual(num_occurrences, 25)
+    assertAlmostEqual(evalue, 1.5e-10)
+    assertEqual(next_index, 1)
+
+@test
+def test_read_motif_statistics_minimal():
+    """Test reading minimal motif statistics"""
+    lines = [
+        "letter-probability matrix:",
+        "next line"
+    ]
+    
+    length, num_occurrences, evalue, next_index = _read_motif_statistics(lines, 0)
+    assert length is None
+    assert num_occurrences == 20
+    assert abs(evalue - 0.0) < 1e-7
+    assertEqual(next_index, 1)
+
+@test
+def test_read_lpm():
+    """Test reading letter probability matrix"""
+    lines = [
+        "0.60 0.10 0.15 0.15",
+        "0.05 0.05 0.85 0.05",
+        "0.10 0.70 0.10 0.10",
+        "",
+        "next section"
+    ]
+    
+    record = Record()
+    record.alphabet = "ACGT"
+    
+    counts, next_index = _read_lpm(record, lines, 0, 3, 20)
+    
+    assertEqual(len(counts["A"]), 3)
+    assertEqual(len(counts["C"]), 3)
+    assertEqual(len(counts["G"]), 3)
+    assertEqual(len(counts["T"]), 3)
+    
+    assertEqual(counts["A"][0], 12)
+    assertEqual(counts["C"][0], 2)
+    assertEqual(counts["G"][0], 3)
+    assertEqual(counts["T"][0], 3)
+
+@test
+def test_read_lpm_with_length():
+    """Test reading LPM with specified length"""
+    lines = [
+        "0.80 0.05 0.05 0.10",
+        "0.05 0.05 0.05 0.85",
+        "0.05 0.85 0.05 0.05",
+        "0.70 0.10 0.10 0.10",
+        "0.50 0.50 0.00 0.00",
+        ""
+    ]
+    
+    record = Record()
+    record.alphabet = "ACGT"
+    
+    counts, next_index = _read_lpm(record, lines, 0, 4, 15)
+    
+    assertEqual(len(counts["A"]), 4)
+    assertEqual(counts["A"][0], 12)
+    assertEqual(counts["T"][1], 13)
+    assertEqual(counts["C"][2], 13)
+    assertEqual(counts["A"][3], 11)
+
+# ============================================================================
+# Edge Cases and Error Handling Tests
+# ============================================================================
+
+@test
+def test_empty_file():
+    """Test handling empty file"""
+    try:
+        empty_lines = List[str]()
+        record = read(empty_lines)
+        assert False, "Should raise exception for empty file"
+    except Exception:
+        pass
+
+@test
+def test_file_with_only_version():
+    """Test file with only version line"""
+    lines = ["MEME version 4.12.0"]
+    try:
+        record = read(lines)
+        assert False, "Should raise exception - missing alphabet"
+    except Exception:
+        pass
+
+@test
+def test_missing_background():
+    """Test file missing background frequencies"""
+    lines = [
+        "MEME version 4.12.0",
+        "ALPHABET= ACGT"
+    ]
+    try:
+        record = read(lines)
+        assert False, "Should raise exception - missing background"
+    except Exception:
+        pass
+
+@test
+def test_mixed_case_input():
+    """Test mixed case handling in input"""
+    lines = [
+        "meme version 4.12.0",
+        "MEME VERSION 4.12.0",
+        "ALPHABET= acgt",
+        "ALPHABET= ACGT"
+    ]
+    
+    record = Record()
+    try:
+        next_index = _read_version(record, lines, 0)
+        assertEqual(record.version, "4.12.0")
+    except Exception:
+        pass
+
+@test
+def test_extra_whitespace():
+    """Test handling extra whitespace"""
+    lines = [
+        "  MEME version 4.12.0  ",
+        "",
+        "  ALPHABET= ACGT  ",
+        "",
+        "  Background letter frequencies  ",
+        "  A 0.25 C 0.25 G 0.25 T 0.25  ",
+        "",
+        "  MOTIF TEST  ",
+        "  letter-probability matrix: w= 1 nsites= 4  ",
+        "  0.25 0.25 0.25 0.25  ",
+        ""
+    ]
+    
+    record = read(lines)
+    assertEqual(record.version, "4.12.0")
+    assertEqual(record.alphabet, "ACGT")
+    assertEqual(len(record), 1)
+    assertEqual(record[0].name, "TEST")
+
+@test
+def test_multiple_background_lines():
+    """Test background frequencies on multiple lines"""
+    lines = [
+        "MEME version 4.12.0",
+        "ALPHABET= ACGT",
+        "Background letter frequencies",
+        "A 0.3 C 0.2",
+        "G 0.2 T 0.3",
+        "",
+        "MOTIF TEST",
+        "letter-probability matrix:",
+        "0.5 0.2 0.2 0.1",
+        ""
+    ]
+    
+    record = read(lines)
+    assertAlmostEqual(record.background["A"], 0.3)
+    assertAlmostEqual(record.background["C"], 0.2) 
+    assertAlmostEqual(record.background["G"], 0.2)
+    assertAlmostEqual(record.background["T"], 0.3)
+
+@test
+def test_zero_occurrences():
+    """Test motif with zero occurrences"""
+    lines = [
+        "MEME version 4.12.0",
+        "ALPHABET= ACGT",
+        "Background letter frequencies",
+        "A 0.25 C 0.25 G 0.25 T 0.25",
+        "MOTIF ZERO",
+        "letter-probability matrix: nsites= 0",
+        "0.5 0.2 0.2 0.1",
+        ""
+    ]
+    
+    record = read(lines)
+    motif = record[0]
+    assertEqual(motif.num_occurrences, 0)
+    
+    for letter in record.alphabet:
+        assertEqual(motif.counts[letter][0], 0)
+
+@test
+def test_very_small_evalue():
+    """Test motif with very small E-value"""
+    lines = [
+        "MEME version 4.12.0",
+        "ALPHABET= ACGT",
+        "Background letter frequencies",
+        "A 0.25 C 0.25 G 0.25 T 0.25",
+        "MOTIF TINY_EVAL",
+        "letter-probability matrix: E= 1e-100",
+        "0.5 0.2 0.2 0.1",
+        ""
+    ]
+    
+    record = read(lines)
+    motif = record[0]
+    assertAlmostEqual(motif.evalue, 1e-100)
+
+# ============================================================================
+# Integration Tests
+# ============================================================================
+
+@test
+def test_full_pipeline_dna():
+    """Test complete DNA motif parsing pipeline"""
+    lines = [
+        "MEME version 5.1.0",
+        "",
+        "ALPHABET= ACGT",
+        "",
+        "Background letter frequencies",
+        "A 0.3 C 0.2 G 0.2 T 0.3",
+        "",
+        "MOTIF CONSENSUS_MOTIF",
+        "letter-probability matrix: alength= 4 w= 3 nsites= 30 E= 1.2e-15",
+        "0.90 0.03 0.03 0.04",
+        "0.02 0.95 0.02 0.01",
+        "0.05 0.05 0.85 0.05",
+        "",
+        "MOTIF WEAK_MOTIF", 
+        "letter-probability matrix: w= 2 nsites= 5 E= 0.5",
+        "0.6 0.2 0.1 0.1",
+        "0.1 0.1 0.1 0.7",
+        ""
+    ]
+    
+    record = read(lines)
+    
+    assertEqual(record.version, "5.1.0")
+    assertEqual(record.alphabet, "ACGT")
+    assertEqual(len(record), 2)
+    
+    motif1 = record["CONSENSUS_MOTIF"]
+    assertEqual(motif1.name, "CONSENSUS_MOTIF")
+    assertEqual(motif1.length, 3)
+    assertEqual(motif1.num_occurrences, 30)
+    assertAlmostEqual(motif1.evalue, 1.2e-15)
+    
+    assertEqual(motif1.counts["A"][0], 27)
+    assertEqual(motif1.counts["C"][1], 29)
+    assertEqual(motif1.counts["G"][2], 26)
+    
+    motif2 = record[1]
+    assertEqual(motif2.name, "WEAK_MOTIF")
+    assertEqual(motif2.length, 2)
+    assertEqual(motif2.num_occurrences, 5)
+    assertAlmostEqual(motif2.evalue, 0.5)
+
+@test
+def test_full_pipeline_rna():
+    """Test complete RNA motif parsing pipeline"""
+    lines = [
+        "MEME version 4.15.0",
+        "",
+        "ALPHABET= ACGU",
+        "",
+        "Background letter frequencies",
+        "A 0.25 C 0.25 G 0.25 U 0.25",
+        "",
+        "MOTIF RNA_STEM",
+        "letter-probability matrix: alength= 4 w= 4 nsites= 12 E= 3.1e-06",
+        "0.08 0.75 0.08 0.09",
+        "0.08 0.08 0.75 0.09", 
+        "0.75 0.08 0.08 0.09",
+        "0.09 0.08 0.08 0.75",
+        ""
+    ]
+    
+    record = read(lines)
+    
+    assertEqual(record.alphabet, "ACGU")
+    assertAlmostEqual(record.background["U"], 0.25)
+    
+    motif = record[0]
+    assertEqual(motif.name, "RNA_STEM")
+    assertEqual(motif.length, 4)
+    
+    assertEqual(motif.counts["C"][0], 9)
+    assertEqual(motif.counts["G"][1], 9)
+    assertEqual(motif.counts["A"][2], 9)
+    assertEqual(motif.counts["U"][3], 9)
+
+@test
+def test_motif_background_inheritance():
+    """Test that motifs inherit background from record"""
+    lines = [
+        "MEME version 4.12.0",
+        "ALPHABET= ACGT",
+        "Background letter frequencies",
+        "A 0.4 C 0.1 G 0.1 T 0.4",
+        "MOTIF BG_TEST",
+        "letter-probability matrix:",
+        "0.5 0.2 0.2 0.1",
+        ""
+    ]
+    
+    record = read(lines)
+    motif = record[0]
+    
+    assertAlmostEqual(motif.background["A"], 0.4)
+    assertAlmostEqual(motif.background["C"], 0.1)
+    assertAlmostEqual(motif.background["G"], 0.1)
+    assertAlmostEqual(motif.background["T"], 0.4)
+
+# ============================================================================
+# File Handle Compatibility Tests
+# ============================================================================
+
+@test
+def test_string_list_input():
+    """Test direct string list input"""
+    lines = [
+        "MEME version 4.12.0",
+        "ALPHABET= ACGT",
+        "Background letter frequencies",
+        "A 0.25 C 0.25 G 0.25 T 0.25",
+        "MOTIF LIST_TEST",
+        "letter-probability matrix:",
+        "0.7 0.1 0.1 0.1",
+        ""
+    ]
+    
+    record = read(lines)
+    assertEqual(len(record), 1)
+    assertEqual(record[0].name, "LIST_TEST")
+
+@test
+def test_iterator_input():
+    """Test iterator input compatibility"""
+    def line_generator():
+        lines = [
+            "MEME version 4.12.0",
+            "ALPHABET= ACGT", 
+            "Background letter frequencies",
+            "A 0.25 C 0.25 G 0.25 T 0.25",
+            "MOTIF GEN_TEST",
+            "letter-probability matrix:",
+            "0.8 0.1 0.05 0.05",
+            ""
+        ]
+        for line in lines:
+            yield line
+    
+    record = read(line_generator())
+    assertEqual(len(record), 1)
+    assertEqual(record[0].name, "GEN_TEST")
+
+# ============================================================================
+# Test Runner Functions
+# ============================================================================
+
+def run_basic_tests():
+    """Run basic functionality tests"""
+    test_record_init()
+    test_record_append_and_indexing()
+    test_record_invalid_key()
+    test_record_iteration()
+    test_motif_init()
+    test_motif_properties()
+
+def run_parser_tests():
+    """Run main parser function tests"""
+    test_read_sample_data()
+    test_read_first_motif()
+    test_read_second_motif()
+    test_read_rna_data()
+    test_read_minimal_data()
+    test_read_invalid_data()
+
+def run_private_function_tests():
+    """Run private function tests"""
+    test_read_version()
+    test_read_version_not_found()
+    test_read_alphabet_dna()
+    test_read_alphabet_rna()
+    test_read_alphabet_invalid()
+    test_read_background()
+    test_read_motif_statistics_full()
+    test_read_motif_statistics_minimal()
+    test_read_lpm()
+    test_read_lpm_with_length()
+
+def run_edge_case_tests():
+    """Run edge case and error handling tests"""
+    test_empty_file()
+    test_file_with_only_version()
+    test_missing_background()
+    test_mixed_case_input()
+    test_extra_whitespace()
+    test_multiple_background_lines()
+
+def run_integration_tests():
+    """Run integration tests"""
+    test_full_pipeline_dna()
+    test_full_pipeline_rna()
+    test_motif_background_inheritance()
+    test_string_list_input()
+    test_iterator_input()
+
+def run_all_tests():
+    """Run all test functions"""
+    print("Running MINIMAL.codon Tests....")
+    
+    try:
+        run_basic_tests()
+        run_parser_tests()
+        run_private_function_tests()
+        run_edge_case_tests()
+        run_integration_tests()
+        
+        print("MINIMAL.codon TESTS PASSED!")
+        print("Classes tested:")
+        print(" Record")
+        print(" Motif")  
+        print(" Module functions")
+        print("Features tested:")
+        print(" MEME minimal format parsing")
+        print(" DNA and RNA alphabet support")
+        print(" Background frequency parsing")
+        print(" Motif statistics and matrix parsing")
+        print(" Error handling and edge cases")
+        print("=" * 60)
+        
+    except Exception as e:
+        print("TEST FAILED:", str(e))
+        print("=" * 60)
+
+if __name__ == "__main__":
+    run_all_tests()
