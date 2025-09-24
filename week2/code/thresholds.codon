@@ -1,0 +1,349 @@
+"""
+Bio.motifs.thresholds - Codon Implementation
+
+Port of BioPython's motif threshold calculation to Codon for high-performance
+computational biology applications.
+
+Key Codon Adaptations from Original BioPython:
+- Replaced complex list comprehensions with explicit loops for static compilation
+- Used explicit type annotations (List, Dict, Optional) throughout
+- Simplified exception handling (generic Exception instead of ValueError)
+- Replaced advanced Python features with basic operations
+- Used manual calculations instead of complex mathematical operations
+- Removed Bio.motifs dependency - works with minimal motif classes
+- Implemented explicit float/int conversions for type safety
+- Used simple iteration patterns instead of advanced Python constructs
+- Maintained API compatibility while enabling static compilation
+
+Classes Implemented:
+- ScoreDistribution: Approximate score distribution calculation for motifs
+
+The ScoreDistribution class uses dynamic programming to calculate score distributions
+with predefined precision, providing methods for calculating various thresholds
+for motif occurrences including FPR, FNR, balanced, and Patser-style thresholds.
+
+Performance optimizations maintain API compatibility while enabling static compilation
+for threshold calculations in computational biology pipelines.
+"""
+
+import math
+from typing import Optional, Dict, List, Tuple
+
+class ScoreDistribution:
+    """Class representing approximate score distribution for a given motif.
+
+    Utilizes a dynamic programming approach to calculate the distribution of
+    scores with a predefined precision. Provides methods for calculating
+    thresholds for motif occurrences.
+    """
+
+    def __init__(self, motif=None, precision: int = 1000, pssm=None, background: Optional[Dict[str, float]] = None):
+        """Initialize the class."""
+        self.min_score = 0.0
+        self.interval = 0.0
+        self.n_points = 0
+        self.ic = 0.0
+        self.step = 0.0
+        self.mo_density = List[float]()
+        self.bg_density = List[float]()
+        
+        if pssm is None and motif is not None:
+            # Initialize from motif
+            motif_min = self._calculate_motif_min_score(motif)
+            motif_max = self._calculate_motif_max_score(motif)
+            
+            self.min_score = min(0.0, motif_min)
+            self.interval = max(0.0, motif_max) - self.min_score
+            self.n_points = precision * motif.length
+            self.ic = self._calculate_motif_ic(motif)
+            
+            if self.n_points <= 0:
+                self.n_points = 100
+            
+            if self.interval == 0.0:
+                self.interval = 1.0
+            
+            self.step = self.interval / float(self.n_points - 1)
+            
+            # Initialize densities
+            self.mo_density = [0.0] * self.n_points
+            self.bg_density = [0.0] * self.n_points
+            
+            # Set initial density at the minimum score position
+            # Initialize at the rightmost position (highest index) corresponding to min score
+            self.mo_density[-1] = 1.0
+            self.bg_density[-1] = 1.0
+            
+            # Process motif positions
+            self._process_motif_positions(motif)
+            
+        elif pssm is not None and background is not None:
+            # Initialize from PSSM
+            pssm_min = self._calculate_pssm_min(pssm)
+            pssm_max = self._calculate_pssm_max(pssm)
+            
+            self.min_score = min(0.0, pssm_min)
+            self.interval = max(0.0, pssm_max) - self.min_score
+            self.n_points = precision * pssm.length
+            self.ic = self._calculate_pssm_mean(pssm, background)
+            
+            if self.n_points <= 0:
+                self.n_points = 100
+            
+            if self.interval == 0.0:
+                self.interval = 1.0
+            
+            self.step = self.interval / float(self.n_points - 1)
+            
+            # Initialize densities
+            self.mo_density = [0.0] * self.n_points
+            self.bg_density = [0.0] * self.n_points
+            
+            # Set initial density at the minimum score position
+            self.mo_density[-1] = 1.0
+            self.bg_density[-1] = 1.0
+            
+            # Process PSSM positions
+            self._process_pssm_positions(pssm, background)
+        else:
+            raise Exception("Must provide either motif or (pssm and background)")
+
+    def _calculate_motif_min_score(self, motif) -> float:
+        """Calculate minimum possible score for motif."""
+        min_score = 0.0
+        for pos in range(motif.length):
+            pos_min = float('inf')
+            for letter in motif.alphabet:
+                if len(motif.counts[letter]) > pos:
+                    count = float(motif.counts[letter][pos])
+                    total = 0.0
+                    for l in motif.alphabet:
+                        if len(motif.counts[l]) > pos:
+                            total += float(motif.counts[l][pos])
+                    
+                    if total > 0.0:
+                        prob = count / total
+                        if prob > 0.0 and letter in motif.background:
+                            bg_prob = motif.background[letter]
+                            if bg_prob > 0.0:
+                                score = math.log(prob / bg_prob, 2)
+                                pos_min = min(pos_min, score)
+            
+            if pos_min != float('inf'):
+                min_score += pos_min
+        return min_score
+
+    def _calculate_motif_max_score(self, motif) -> float:
+        """Calculate maximum possible score for motif."""
+        max_score = 0.0
+        for pos in range(motif.length):
+            pos_max = float('-inf')
+            for letter in motif.alphabet:
+                if len(motif.counts[letter]) > pos:
+                    count = float(motif.counts[letter][pos])
+                    total = 0.0
+                    for l in motif.alphabet:
+                        if len(motif.counts[l]) > pos:
+                            total += float(motif.counts[l][pos])
+                    
+                    if total > 0.0:
+                        prob = count / total
+                        if prob > 0.0 and letter in motif.background:
+                            bg_prob = motif.background[letter]
+                            if bg_prob > 0.0:
+                                score = math.log(prob / bg_prob, 2)
+                                pos_max = max(pos_max, score)
+            
+            if pos_max != float('-inf'):
+                max_score += pos_max
+        return max_score
+
+    def _calculate_motif_ic(self, motif) -> float:
+        """Calculate information content for motif."""
+        ic = 0.0
+        for pos in range(motif.length):
+            pos_ic = 0.0
+            total = 0.0
+            for letter in motif.alphabet:
+                if len(motif.counts[letter]) > pos:
+                    total += float(motif.counts[letter][pos])
+            
+            if total > 0.0:
+                for letter in motif.alphabet:
+                    if len(motif.counts[letter]) > pos:
+                        count = float(motif.counts[letter][pos])
+                        if count > 0.0:
+                            prob = count / total
+                            if letter in motif.background:
+                                bg_prob = motif.background[letter]
+                                if bg_prob > 0.0:
+                                    pos_ic += prob * math.log(prob / bg_prob, 2)
+            
+            ic += pos_ic
+        return ic
+
+    def _calculate_pssm_min(self, pssm) -> float:
+        """Calculate minimum PSSM score."""
+        return pssm.min
+
+    def _calculate_pssm_max(self, pssm) -> float:
+        """Calculate maximum PSSM score."""
+        return pssm.max
+
+    def _calculate_pssm_mean(self, pssm, background: Dict[str, float]) -> float:
+        """Calculate mean PSSM score."""
+        return pssm.mean(background)
+
+    def _process_motif_positions(self, motif):
+        """Process motif positions to build score distribution."""
+        for pos in range(motif.length):
+            # Calculate scores and probabilities for this position
+            scores = Dict[str, float]()
+            mo_probs = Dict[str, float]()
+            
+            total = 0.0
+            for letter in motif.alphabet:
+                if len(motif.counts[letter]) > pos:
+                    total += float(motif.counts[letter][pos])
+            
+            if total > 0.0:
+                for letter in motif.alphabet:
+                    if len(motif.counts[letter]) > pos:
+                        count = float(motif.counts[letter][pos])
+                        prob = count / total
+                        mo_probs[letter] = prob
+                        
+                        if letter in motif.background:
+                            bg_prob = motif.background[letter]
+                            if bg_prob > 0.0:
+                                scores[letter] = math.log(prob / bg_prob, 2)
+                            else:
+                                scores[letter] = 0.0
+                        else:
+                            scores[letter] = 0.0
+                
+                self.modify(scores, mo_probs, motif.background)
+
+    def _process_pssm_positions(self, pssm, background: Dict[str, float]):
+        """Process PSSM positions to build score distribution."""
+        for position in range(pssm.length):
+            mo_new = [0.0] * self.n_points
+            bg_new = [0.0] * self.n_points
+            
+            # Get scores for this position using method call
+            position_scores = pssm.get_position(position)
+            
+            for letter in position_scores:
+                score = position_scores[letter]
+                bg = background[letter]
+                mo = pow(2.0, pssm[letter, position]) * bg
+                
+                d = self._index_diff(score)
+                for i in range(self.n_points):
+                    new_idx = self._add(i, d)
+                    mo_new[new_idx] += self.mo_density[i] * mo
+                    bg_new[new_idx] += self.bg_density[i] * bg
+            
+            self.mo_density = mo_new
+            self.bg_density = bg_new
+
+    def _index_diff(self, x: float, y: float = 0.0) -> int:
+        """Calculate index difference for score discretization."""
+        if self.step == 0.0:
+            return 0
+        return int((x - y + 0.5 * self.step) / self.step)
+
+    def _add(self, i: int, j: int) -> int:
+        """Add indices with bounds checking."""
+        result = i + j
+        if result < 0:
+            return 0
+        elif result >= self.n_points:
+            return self.n_points - 1
+        else:
+            return result
+
+    def modify(self, scores: Dict[str, float], mo_probs: Dict[str, float], bg_probs: Dict[str, float]):
+        """Modify motif and background density distributions."""
+        mo_new = [0.0] * self.n_points
+        bg_new = [0.0] * self.n_points
+        
+        for letter in scores:
+            if letter in mo_probs and letter in bg_probs:
+                score = scores[letter]
+                mo_prob = mo_probs[letter]
+                bg_prob = bg_probs[letter]
+                
+                d = self._index_diff(score)
+                for i in range(self.n_points):
+                    new_idx = self._add(i, d)
+                    mo_new[new_idx] += self.mo_density[i] * mo_prob
+                    bg_new[new_idx] += self.bg_density[i] * bg_prob
+        
+        self.mo_density = mo_new
+        self.bg_density = bg_new
+
+    def threshold_fpr(self, fpr: float) -> float:
+        """Approximate the log-odds threshold which makes the type I error (false positive rate)."""
+        i = self.n_points
+        prob = 0.0
+        while prob < fpr and i > 0:
+            i -= 1
+            if i < len(self.bg_density):
+                prob += self.bg_density[i]
+        return self.min_score + float(i) * self.step
+
+    def threshold_fnr(self, fnr: float) -> float:
+        """Approximate the log-odds threshold which makes the type II error (false negative rate)."""
+        i = -1
+        prob = 0.0
+        while prob < fnr and i < self.n_points - 1:
+            i += 1
+            if i < len(self.mo_density):
+                prob += self.mo_density[i]
+        return self.min_score + float(i) * self.step
+
+    def threshold_balanced(self, rate_proportion: float = 1.0) -> float:
+        """Approximate log-odds threshold making FNR equal to FPR times rate_proportion."""
+        i = self.n_points
+        fpr = 0.0
+        fnr = 1.0
+        
+        while fpr * rate_proportion < fnr and i > 0:
+            i -= 1
+            if i < len(self.bg_density):
+                fpr += self.bg_density[i]
+            if i < len(self.mo_density):
+                fnr -= self.mo_density[i]
+        
+        threshold = self.min_score + float(i) * self.step
+        return threshold
+
+    def threshold_balanced_with_rate(self, rate_proportion: float = 1.0) -> Tuple[float, float]:
+        """Approximate log-odds threshold making FNR equal to FPR times rate_proportion, return with rate."""
+        i = self.n_points
+        fpr = 0.0
+        fnr = 1.0
+        
+        while fpr * rate_proportion < fnr and i > 0:
+            i -= 1
+            if i < len(self.bg_density):
+                fpr += self.bg_density[i]
+            if i < len(self.mo_density):
+                fnr -= self.mo_density[i]
+        
+        threshold = self.min_score + float(i) * self.step
+        return threshold, fpr
+
+    def threshold_patser(self) -> float:
+        """Threshold selection mimicking the behaviour of patser (Hertz, Stormo 1999) software.
+
+        It selects such a threshold that the log(fpr)=-ic(M)
+        note: the actual patser software uses natural logarithms instead of log_2, so the numbers
+        are not directly comparable.
+        """
+        if self.ic <= 0.0:
+            fpr = 0.5
+        else:
+            fpr = pow(2.0, -self.ic)
+        return self.threshold_fpr(fpr)
