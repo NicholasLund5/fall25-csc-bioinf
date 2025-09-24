@@ -1,31 +1,3 @@
-"""
-Bio.motifs.thresholds - Codon Implementation
-
-Port of BioPython's motif threshold calculation to Codon for high-performance
-computational biology applications.
-
-Key Codon Adaptations from Original BioPython:
-- Replaced complex list comprehensions with explicit loops for static compilation
-- Used explicit type annotations (List, Dict, Optional) throughout
-- Simplified exception handling (generic Exception instead of ValueError)
-- Replaced advanced Python features with basic operations
-- Used manual calculations instead of complex mathematical operations
-- Removed Bio.motifs dependency - works with minimal motif classes
-- Implemented explicit float/int conversions for type safety
-- Used simple iteration patterns instead of advanced Python constructs
-- Maintained API compatibility while enabling static compilation
-
-Classes Implemented:
-- ScoreDistribution: Approximate score distribution calculation for motifs
-
-The ScoreDistribution class uses dynamic programming to calculate score distributions
-with predefined precision, providing methods for calculating various thresholds
-for motif occurrences including FPR, FNR, balanced, and Patser-style thresholds.
-
-Performance optimizations maintain API compatibility while enabling static compilation
-for threshold calculations in computational biology pipelines.
-"""
-
 import math
 from typing import Optional, Dict, List, Tuple
 

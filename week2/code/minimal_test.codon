@@ -1,35 +1,3 @@
-"""
-Bio.motifs.minimal Test Suite - Codon Implementation
-
-Comprehensive test suite for MEME minimal format parser ported from BioPython 
-to Codon, a high-performance Python compiler for computational biology.
-
-Codon Adaptations Made:
-- Replaced Python unittest framework with custom assertion functions
-- Used @test decorators instead of unittest.TestCase methods
-- Simplified exception handling (removed specific exception type checking)
-- Used literal tolerance values for floating point comparisons
-- Replaced complex file I/O with string-based parsing
-- Added explicit type handling for cross-language compatibility
-- Maintained BioPython API compatibility while optimizing for Codon's static compilation
-- Used manual string manipulation instead of advanced Python string methods
-
-Classes Tested:
-- Record: MEME format results container with motif indexing and iteration
-- Motif: Motif representation with counts, metadata, and background frequencies
-- Module functions: read(), _read_version(), _read_alphabet(), _read_background(), etc.
-
-Test Coverage:
-- MEME file format parsing (version, alphabet, background frequencies)
-- Motif parsing (names, statistics, letter-probability matrices)
-- Record operations (indexing by name/number, iteration, length)
-- Error handling (invalid formats, missing data, malformed input)
-- Edge cases (empty files, single motifs, RNA vs DNA alphabets)
-- Integration testing of complete parsing pipeline
-
-30+ test cases validate Codon-compiled MEME minimal format parsing functionality 
-for high-performance computational biology applications.
-"""
 
 import math
 from minimal import read, Record, Motif, _read_version, _read_alphabet, _read_background

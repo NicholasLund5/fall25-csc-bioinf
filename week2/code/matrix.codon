@@ -1,34 +1,3 @@
-"""
-Bio.motifs.matrix - Codon Implementation
-
-Port of BioPython's motif matrix module to Codon for high-performance computational biology.
-Provides sequence motif analysis through frequency matrices, position-weight matrices, 
-and position-specific scoring matrices.
-
-Key Codon Adaptations from Original BioPython:
-- Replaced dict inheritance with explicit data storage using Dict[str, List[float]]
-- Removed numpy dependencies and C extension (_pwm) for pure Codon implementation  
-- Simplified Seq class implementation without full BioPython.Seq functionality
-- Replaced complex slicing operations with explicit loops and indexing
-- Used explicit type annotations (Dict, List, Optional) for static compilation
-- Removed advanced features like search() method and distribution calculations
-- Simplified exception handling (generic Exception instead of specific types)
-- Replaced dict.fromkeys() with explicit dictionary construction
-- Eliminated tuple conversion and advanced indexing patterns
-- Used manual dictionary copying instead of dict() constructor
-- Replaced numbers.Integral checks with isinstance(x, int)
-- Simplified background normalization without dict comprehensions
-
-Classes Implemented:
-- GenericPositionMatrix: Base matrix operations, consensus calculation, GC analysis
-- FrequencyPositionMatrix: Count-based matrices with pseudocount normalization
-- PositionWeightMatrix: Probability matrices with log-odds transformation  
-- PositionSpecificScoringMatrix: Scoring matrices for sequence analysis
-- Seq: Minimal sequence wrapper for BioPython compatibility
-
-Performance optimizations maintain API compatibility while enabling static compilation
-for computational biology applications requiring high-throughput motif analysis.
-"""
 
 import math
 from python import numpy as np

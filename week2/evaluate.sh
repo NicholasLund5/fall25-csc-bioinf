@@ -11,6 +11,7 @@ echo "Compiling motifs tests..."
 codon build -release week2/code/matrix_test.codon -o test_matrix_exe
 codon build -release week2/code/minimal_test.codon -o test_minimal_exe
 codon build -release week2/code/thresholds_test.codon -o test_thresholds_exe
+codon build -release week2/code/__init___test.codon -o test_init_exe
 
 echo "Running motifs tests..."
 
@@ -26,5 +27,6 @@ fi
 ./test_matrix_exe
 ./test_minimal_exe
 ./test_thresholds_exe
+./test_init_exe
 
 echo "All tests completed successfully!"

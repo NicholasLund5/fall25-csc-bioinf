@@ -1,29 +1,3 @@
-"""
-Bio.motifs.minimal - Codon Implementation
-
-Port of BioPython's MEME minimal motif format parser to Codon for high-performance
-computational biology applications.
-
-Key Codon Adaptations from Original BioPython:
-- Replaced file handle iteration with explicit line reading
-- Simplified string parsing without complex regex or advanced string methods
-- Used explicit type annotations (List, Dict, Optional) for static compilation
-- Removed Bio.motifs dependency - implemented minimal Motif class locally
-- Simplified exception handling (generic Exception instead of ValueError)
-- Replaced list comprehensions with explicit loops where needed
-- Used manual string splitting and parsing instead of complex operations
-- Removed doctest integration and advanced BioPython features
-- Implemented minimal file I/O without BioPython's handle management
-
-Classes Implemented:
-- Record: Container for MEME minimal format results
-- Motif: Minimal motif representation with counts and metadata
-- FrequencyPositionMatrix: Basic count matrix (subset needed for minimal format)
-
-Performance optimizations maintain API compatibility while enabling static compilation
-for parsing MEME minimal format files in computational biology pipelines.
-"""
-
 from matrix import FrequencyPositionMatrix
 from typing import Optional, Tuple
 
