@@ -1,0 +1,23 @@
+(claude sonnet 4)
+## Prompt 1:
+I have BioPython's Bio.motifs.__init__.py that defines a Motif class inheriting from dict with @property decorators and numpy operations. Convert this to Codon with these specific changes: replace `class Motif(dict)` with `class Motif` using `Dict[str, List[float]]` for internal storage, change all `@property def consensus(self):` to `def get_consensus(self) -> str:`, replace `import numpy as np` with manual log/exp implementations, add explicit type annotations like `def __init__(self, alphabet: Optional[str] = None, counts: Optional[Dict[str, List[float]]] = None)`, and convert all list comprehensions to explicit for loops. The class needs methods for PWM/PSSM calculations, consensus sequences, and reverse complement operations.
+
+## Prompt 2:
+Bio.motifs.matrix has 4 classes: GenericPositionMatrix(dict), FrequencyPositionMatrix(GenericPositionMatrix), PositionWeightMatrix(FrequencyPositionMatrix), PositionSpecificScoringMatrix(PositionWeightMatrix). Convert to Codon by: removing all dict inheritance and using `self._data: Dict[str, List[float]] = {}` storage, replacing `def __getitem__(self, key):` with `def get_row(self, key: str) -> List[float]:`, converting `[sum(values) for values in zip(*self.values())]` to explicit loops, implementing `log()` manually since `from math import log` might not work, adding type annotations to every method like `def normalize(self, pseudocounts: Union[float, Dict[str, float]] = 0.0) -> None:`, and ensuring all statistical calculations (mean, std, correlation) use basic arithmetic.
+
+## Prompt 3:
+Bio.motifs.minimal is a MEME format parser with classes Record(list) and Motif. Convert to Codon by: replacing `class Record(list):` with `class Record:` using `self._motifs: List[Motif] = []` storage, changing file iteration `for line in handle:` to explicit `lines = handle.readlines(); for i in range(len(lines)):`, removing regex `import re` and using only `line.split()`, `line.strip()`, creating functions `def _read_version(lines: List[str], index: int) -> Tuple[str, int]:`, `def _read_alphabet(lines: List[str], index: int) -> Tuple[str, int]:`, converting probability parsing `values = [float(x) for x in line.split()]` to explicit loops, and adding full type annotations including `def read(handle: Union[TextIO, List[str]]) -> Record:`.
+
+## Prompt 4:
+Bio.motifs.thresholds has ScoreDistribution class using scipy for statistical calculations and complex data structures. Convert to Codon by: replacing `from scipy import stats` with manual implementations of statistical functions, converting `self.ic_values = [0.0] * len(scores)` initialization patterns, implementing threshold calculations `def threshold_fpr(self, fpr: float) -> float:` with explicit loops instead of numpy operations, adding proper type annotations `def __init__(self, motif: Any, precision: int = 10**4):`, ensuring compatibility with the converted Motif classes from previous modules, and replacing any `defaultdict` usage with explicit dict initialization checks.
+
+## Prompt 5:
+Create comprehensive Codon test files for the converted modules. Structure as: test_motifs.py with `@test def test_motif_initialization():`, `@test def test_consensus_calculation():`, etc., test_matrix.py with tests for all 4 matrix classes, test_minimal.py for MEME parsing, test_thresholds.py for score distributions. Include sample data like `DNA_SEQUENCES = ["ACGT", "AGGT", "TCGT"]`, `SAMPLE_COUNTS = {"A": [1.0, 2.0], "C": [3.0, 1.0], "G": [2.0, 2.0], "T": [0.0, 1.0]}`. Test edge cases: empty motifs, single-position motifs, extreme probability values, malformed MEME files. Use assertions like `assert result == expected`, `assert abs(result - expected) < 0.001` for floating point comparisons.
+
+## Prompt 6:
+My converted Codon modules have these compilation errors: "variable used before declaration", "type mismatch in assignment", "unsupported method call". Fix systematically: ensure every variable is declared with type before use like `result: float = 0.0`, fix type mismatches where `List[str]` is assigned to `List[float]`, replace unsupported methods like `dict.fromkeys()` with explicit initialization loops, correct method signatures where parameters don't match type annotations, remove any remaining Python-specific syntax like f-strings or advanced string operations, and ensure all imports work with Codon (use `from python import` if needed for missing standard library functions).
+
+(GPT-5 mini)
+prompt 1:
+clean this up the tiniest bit to look better in a readme [report.md]
+clean up and format these ai prompts just a little bit to look better in a txt file [ai.txt]
