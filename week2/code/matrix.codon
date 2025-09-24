@@ -291,6 +291,13 @@ class FrequencyPositionMatrix:
             self.data[letter] = float_list
         self.alphabet = alphabet
 
+    def __getitem__(self, key: str) -> List[float]:
+        """Get counts for a specific letter."""
+        if key in self.data:  # Change from self._counts to self.data
+            return self.data[key]
+        else:
+            raise KeyError("Letter '" + key + "' not found in alphabet")
+
     def normalize(self, pseudocounts=None):
         counts = Dict[str, List[float]]()
         if pseudocounts is None:

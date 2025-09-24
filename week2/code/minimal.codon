@@ -33,7 +33,15 @@ class Motif:
     def __init__(self, alphabet: str, counts: Dict[str, List[int]]):
         """Initialize motif with alphabet and count matrix."""
         self.alphabet = alphabet
-        self.counts = FrequencyPositionMatrix(alphabet, counts)
+        
+        float_counts = Dict[str, List[float]]()
+        for letter in alphabet:
+            float_list = List[float]()
+            for count in counts[letter]:
+                float_list.append(float(count))
+            float_counts[letter] = float_list
+        
+        self.counts = FrequencyPositionMatrix(alphabet, float_counts)
         self.background = Dict[str, float]()
         self.length = self.counts.length
         self.num_occurrences = 0
@@ -52,13 +60,26 @@ class Record:
         self.alphabet = ""
         self.background = Dict[str, float]()
         self.sequences = List[str]()
-        self._motifs = List[Motif]()
+        
+        dummy_counts = Dict[str, List[int]]()
+        dummy_counts["A"] = List[int]()
+        dummy_counts["A"].append(1)
+        dummy_motif = Motif("A", dummy_counts)
+        self._motifs = [dummy_motif]
+        self._motifs.clear()
+        
         self._motif_names = Dict[str, int]()
-    
-    def append(self, motif: Motif):
+        
+    def append(self, motif):
         """Add a motif to the record."""
-        index = len(self._motifs)
-        self._motifs.append(motif)
+        if len(self._motifs) == 0:
+            self._motifs = [motif]
+        else:
+            temp = list(self._motifs)
+            temp.append(motif)
+            self._motifs = temp
+        
+        index = len(self._motifs) - 1
         if motif.name:
             self._motif_names[motif.name] = index
     
@@ -96,7 +117,6 @@ def read(handle) -> Record:
     motif_number = 0
     record = Record()
     
-    # Convert handle to list of lines if it's a file-like object
     if hasattr(handle, 'readlines'):
         lines = handle.readlines()
     elif hasattr(handle, '__iter__'):
@@ -106,48 +126,40 @@ def read(handle) -> Record:
     
     line_index = 0
     
-    # Read version
     line_index = _read_version(record, lines, line_index)
-    
-    # Read alphabet
     line_index = _read_alphabet(record, lines, line_index)
-    
-    # Read background
     line_index = _read_background(record, lines, line_index)
-    
-    # Read motifs
+
     while line_index < len(lines):
-        # Find next motif
         while line_index < len(lines):
             line = lines[line_index].strip()
             if line.startswith("MOTIF"):
                 break
             line_index += 1
         else:
-            # No more motifs found
             break
-        
-        # Parse motif name
-        parts = line.split()
+
+        parts = line.split(maxsplit=1)
         if len(parts) < 2:
             raise Exception("Invalid MOTIF line format: " + line)
-        name = parts[1]
+        name = parts[1].strip()
         motif_number += 1
         line_index += 1
         
-        # Read motif statistics and matrix
+        if line_index >= len(lines) or not lines[line_index].strip().startswith("letter-probability matrix"):
+            raise Exception(f"Motif {name} missing matrix definition")
+
         length, num_occurrences, evalue, line_index = _read_motif_statistics(lines, line_index)
         counts, line_index = _read_lpm(record, lines, line_index, length, num_occurrences)
         
-        # Create motif
         motif = Motif(record.alphabet, counts)
-        motif.background = record.background
+        for letter in record.background:
+            motif.background[letter] = record.background[letter]
         motif.length = motif.counts.length
         motif.num_occurrences = num_occurrences
         motif.evalue = evalue
         motif.name = name
         record.append(motif)
-    
     return record
 
 
@@ -190,10 +202,8 @@ def _read_alphabet(record: Record, lines: List[str], start_index: int) -> int:
 
 
 def _read_background(record: Record, lines: List[str], start_index: int) -> int:
-    """Read background letter frequencies (PRIVATE)."""
     line_index = start_index
-    
-    # Find background frequencies line
+
     while line_index < len(lines):
         line = lines[line_index].strip()
         if line.startswith("Background letter frequencies"):
@@ -201,42 +211,38 @@ def _read_background(record: Record, lines: List[str], start_index: int) -> int:
             break
         line_index += 1
     else:
-        raise Exception("Improper input file. File should contain a line starting with 'Background letter frequencies'")
-    
-    # Read frequency lines
-    background_freqs = List[float]()
+        raise Exception("Improper input file: missing 'Background letter frequencies'")
+
     while line_index < len(lines):
         line = lines[line_index].strip()
-        if not line:
-            # Empty line indicates end of background section
+        if (not line) or line.startswith("MOTIF") or line.startswith("letter-probability matrix"):
             break
-        
-        parts = line.split(" ")
-        for i in range(len(parts)):
-            if i % 2 == 1:  # Every second element is a frequency
-                try:
-                    freq = float(parts[i])
-                    background_freqs.append(freq)
-                except ValueError:
-                    pass
+
+        parts = line.split()
+        if len(parts) % 2 != 0:
+            raise Exception(f"Invalid background line: {line}")
+
+        for j in range(0, len(parts), 2):
+            letter = parts[j]
+            try:
+                freq = float(parts[j+1])
+                record.background[letter] = freq
+            except ValueError:
+                pass
+
         line_index += 1
-    
-    if len(background_freqs) == 0:
-        raise Exception("Unexpected end of stream: Expected to find background frequencies")
-    
-    # Map frequencies to alphabet letters
-    for i in range(min(len(record.alphabet), len(background_freqs))):
-        letter = record.alphabet[i]
-        record.background[letter] = background_freqs[i]
-    
-    return line_index + 1
+
+    if len(record.background) == 0:
+        raise Exception("No background frequencies found")
+
+    return line_index
+
 
 
 def _read_motif_statistics(lines: List[str], start_index: int) -> Tuple[Optional[int], int, float, int]:
     """Read motif statistics (PRIVATE)."""
     line_index = start_index
     
-    # Find letter-probability matrix line
     while line_index < len(lines):
         line = lines[line_index].strip()
         if line.startswith("letter-probability matrix:"):
@@ -246,14 +252,10 @@ def _read_motif_statistics(lines: List[str], start_index: int) -> Tuple[Optional
         raise Exception("Expected to find 'letter-probability matrix:' line")
     
     line = lines[line_index]
-    
-    # Parse statistics from the line
-    # Default values
     length = None
     num_occurrences = 20
     evalue = 0.0
     
-    # Extract nsites
     if "nsites=" in line:
         parts = line.split("nsites=")
         if len(parts) > 1:
@@ -263,7 +265,6 @@ def _read_motif_statistics(lines: List[str], start_index: int) -> Tuple[Optional
             except ValueError:
                 num_occurrences = 20
     
-    # Extract length (w=)
     if "w=" in line:
         parts = line.split("w=")
         if len(parts) > 1:
@@ -273,7 +274,6 @@ def _read_motif_statistics(lines: List[str], start_index: int) -> Tuple[Optional
             except ValueError:
                 length = None
     
-    # Extract E-value
     if "E=" in line:
         parts = line.split("E=")
         if len(parts) > 1:
@@ -292,7 +292,6 @@ def _read_lpm(record: Record, lines: List[str], start_index: int,
     line_index = start_index
     counts = Dict[str, List[int]]()
     
-    # Initialize count lists
     for letter in record.alphabet:
         counts[letter] = List[int]()
     
@@ -300,35 +299,29 @@ def _read_lpm(record: Record, lines: List[str], start_index: int,
     while line_index < len(lines):
         line = lines[line_index].strip()
         if not line:
-            # Empty line - check if we have expected length
             if length is not None and positions_read < length:
                 line_index += 1
                 continue
             else:
                 break
         
-        # Try to parse as frequency line
         parts = line.split()
         if len(parts) != 4:
-            # Not a frequency line
             break
         
         try:
             freqs = [float(part) for part in parts]
         except ValueError:
-            # Not all parts are numbers
             break
         
-        # Convert frequencies to counts and add to matrix
         for i, letter in enumerate(record.alphabet):
             if i < len(freqs):
-                count = round(freqs[i] * num_occurrences)
+                count = int(round(freqs[i] * num_occurrences))
                 counts[letter].append(count)
         
         positions_read += 1
         line_index += 1
         
-        # Stop if we've read the expected length
         if length is not None and positions_read >= length:
             break
     
