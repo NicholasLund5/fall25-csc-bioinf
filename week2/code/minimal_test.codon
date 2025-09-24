@@ -760,29 +760,24 @@ def test_iterator_input():
 
 def run_basic_tests():
     """Run basic functionality tests"""
-    print("=== Running Basic Tests ===")
     test_record_init()
     test_record_append_and_indexing()
     test_record_invalid_key()
     test_record_iteration()
     test_motif_init()
     test_motif_properties()
-    print("Basic Record and Motif tests passed")
 
 def run_parser_tests():
     """Run main parser function tests"""
-    print("=== Running Parser Tests ===")
     test_read_sample_data()
     test_read_first_motif()
     test_read_second_motif()
     test_read_rna_data()
     test_read_minimal_data()
     test_read_invalid_data()
-    print("Main parser tests passed")
 
 def run_private_function_tests():
     """Run private function tests"""
-    print("=== Running Private Function Tests ===")
     test_read_version()
     test_read_version_not_found()
     test_read_alphabet_dna()
@@ -793,33 +788,27 @@ def run_private_function_tests():
     test_read_motif_statistics_minimal()
     test_read_lpm()
     test_read_lpm_with_length()
-    print("Private function tests passed")
 
 def run_edge_case_tests():
     """Run edge case and error handling tests"""
-    print("=== Running Edge Case Tests ===")
     test_empty_file()
     test_file_with_only_version()
     test_missing_background()
     test_mixed_case_input()
     test_extra_whitespace()
     test_multiple_background_lines()
-    print("Integration tests passed")
 
 def run_integration_tests():
     """Run integration tests"""
-    print("=== Running Integration Tests ===")
     test_full_pipeline_dna()
     test_full_pipeline_rna()
     test_motif_background_inheritance()
     test_string_list_input()
     test_iterator_input()
-    print("Integration tests passed")
 
 def run_all_tests():
     """Run all test functions"""
-    print("Starting Comprehensive Bio.motifs.minimal Tests")
-    print("=" * 60)
+    print("Running MINIMAL.codon Tests....")
     
     try:
         run_basic_tests()
@@ -828,13 +817,11 @@ def run_all_tests():
         run_edge_case_tests()
         run_integration_tests()
         
-        print("=" * 60)
-        print("ALL TESTS PASSED!")
-        print("Coverage: Complete Bio.motifs.minimal module functionality")
+        print("MINIMAL.codon TESTS PASSED!")
         print("Classes tested:")
-        print(" Record (complete)")
-        print(" Motif (complete)")  
-        print(" Module functions (complete)")
+        print(" Record")
+        print(" Motif")  
+        print(" Module functions")
         print("Features tested:")
         print(" MEME minimal format parsing")
         print(" DNA and RNA alphabet support")

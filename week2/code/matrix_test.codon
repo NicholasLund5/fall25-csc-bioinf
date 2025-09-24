@@ -878,48 +878,39 @@ def test_integration_consensus_scoring():
 
 def run_basic_tests():
     """Run basic functionality tests"""
-    print("=== Running Basic Tests ===")
     test_generic_position_matrix_init()
     test_generic_position_matrix_inconsistent_lengths()
     test_generic_position_matrix_str()
     test_generic_position_matrix_getitem()
     test_generic_position_matrix_setitem()
     test_generic_position_matrix_keys()
-    print("Basic GenericPositionMatrix tests passed")
 
 def run_property_tests():
     """Run property calculation tests"""
-    print("=== Running Property Tests ===")
     test_generic_position_matrix_consensus()
     test_generic_position_matrix_anticonsensus()
     test_generic_position_matrix_degenerate_consensus()
     test_generic_position_matrix_calculate_consensus()
     test_generic_position_matrix_gc_content()
     test_reverse_complement()
-    print("Property calculation tests passed")
 
 def run_frequency_matrix_tests():
     """Run FrequencyPositionMatrix tests"""
-    print("=== Running FrequencyPositionMatrix Tests ===")
     test_frequency_position_matrix()
     test_frequency_position_matrix_normalize()
     test_frequency_position_matrix_normalize_with_pseudocounts()
     test_frequency_position_matrix_normalize_with_dict_pseudocounts()
-    print("FrequencyPositionMatrix tests passed")
 
 def run_weight_matrix_tests():
     """Run PositionWeightMatrix tests"""
-    print("=== Running PositionWeightMatrix Tests ===")
     test_position_weight_matrix_init()
     test_position_weight_matrix_init_with_data()
     test_position_weight_matrix_getitem()
     test_position_weight_matrix_log_odds()
     test_position_weight_matrix_log_odds_custom_background()
-    print("PositionWeightMatrix tests passed")
 
 def run_scoring_matrix_tests():
     """Run PositionSpecificScoringMatrix tests"""
-    print("=== Running PositionSpecificScoringMatrix Tests ===")
     test_position_specific_scoring_matrix_init()
     test_position_specific_scoring_matrix_init_with_data()
     test_position_specific_scoring_matrix_getitem()
@@ -935,11 +926,9 @@ def run_scoring_matrix_tests():
     test_position_specific_scoring_matrix_dist_pearson()
     test_position_specific_scoring_matrix_dist_pearson_at()
     test_position_specific_scoring_matrix_different_alphabets()
-    print("PositionSpecificScoringMatrix tests passed")
 
 def run_edge_case_tests():
     """Run edge case and error handling tests"""
-    print("=== Running Edge Case Tests ===")
     test_edge_cases_empty_alphabet()
     test_edge_cases_zero_counts()
     test_edge_cases_single_position()
@@ -947,20 +936,16 @@ def run_edge_case_tests():
     test_edge_cases_negative_values()
     test_edge_cases_infinite_values()
     test_edge_cases_nan_values()
-    print("Edge case tests passed")
 
 def run_integration_tests():
     """Run integration tests"""
-    print("=== Running Integration Tests ===")
     test_integration_frequency_to_pwm_to_pssm()
     test_integration_reverse_complement_consistency()
     test_integration_consensus_scoring()
-    print("Integration tests passed")
 
 def run_all_tests():
     """Run all test functions"""
-    print("Starting Comprehensive Bio.motifs.matrix Tests")
-    print("=" * 60)
+    print("Running matrix.codon Tests....")
     
     try:
         run_basic_tests()
@@ -971,19 +956,17 @@ def run_all_tests():
         run_edge_case_tests()
         run_integration_tests()
         
-        print("=" * 60)
-        print("ALL TESTS PASSED")
-        print("Coverage: Complete Bio.motifs.matrix module functionality")
+        print("MATRIX.codon TESTS PASSED")
         print("Classes tested:")
-        print(" GenericPositionMatrix (complete)")
-        print(" FrequencyPositionMatrix (complete)")
-        print(" PositionWeightMatrix (complete)")
-        print(" PositionSpecificScoringMatrix (complete)")
-        print(" Seq helper class (complete)")
+        print(" GenericPositionMatrix")
+        print(" FrequencyPositionMatrix")
+        print(" PositionWeightMatrix")
+        print(" PositionSpecificScoringMatrix")
+        print(" Seq helper class")
         print("=" * 60)
         
     except Exception as e:
-        print("❌ TEST FAILED:", str(e))
+        print("TEST FAILED:", str(e))
         print("=" * 60)
 
 if __name__ == "__main__":

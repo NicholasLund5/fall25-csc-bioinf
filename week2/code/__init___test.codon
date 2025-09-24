@@ -173,13 +173,14 @@ def test_motif_init_with_alignment():
     """Test Motif initialization with alignment."""
     sequences = ["ACGT", "ACGA", "TCGT"]
     align = SimpleAlignment(sequences)
-    motif = Motif(alignment=align)
+    motif = Motif()
+    motif._init_with_alignment(align)
     
     assertEqual(motif.alphabet, "ACGT")
     assertEqual(motif.length, 4)
     assertEqual(len(motif), 4)
-    assertTrue(motif._alignment is not None)
-    assertTrue(motif._counts is not None)
+    assertTrue(len(motif._alignment_sequences) > 0)
+    assertTrue(motif._has_data)
 
 @test
 def test_motif_init_with_counts():
@@ -191,25 +192,13 @@ def test_motif_init_with_counts():
         "T": [0.0, 0.0, 0.0, 0.0]
     }
     
-    motif = Motif(counts=counts)
+    motif = Motif()
+    motif._init_with_counts(counts)
     
     assertEqual(motif.alphabet, "ACGT")
     assertEqual(motif.length, 4)
-    assertEqual(motif._alignment, None)
-    assertTrue(motif._counts is not None)
-
-@test
-def test_motif_init_both_counts_and_alignment_raises():
-    """Test that providing both counts and alignment raises an error."""
-    sequences = ["ACGT"]
-    align = SimpleAlignment(sequences)
-    counts = {"A": [1.0], "C": [0.0], "G": [0.0], "T": [0.0]}
-    
-    try:
-        motif = Motif(alignment=align, counts=counts)
-        assert False, "Expected ValueError when both alignment and counts provided"
-    except ValueError:
-        pass
+    assertEqual(len(motif._alignment_sequences), 0)
+    assertTrue(motif._has_data)
 
 @test
 def test_motif_create_function():
@@ -342,7 +331,8 @@ def test_motif_pwm():
         "T": [0.0, 0.0, 0.0, 0.0]
     }
     
-    motif = Motif(counts=counts)
+    motif = Motif()
+    motif._init_with_counts(counts)
     pwm = motif.pwm
     
     # First position should be all A
@@ -363,7 +353,8 @@ def test_motif_pwm_with_pseudocounts():
         "T": [0.0, 0.0, 0.0, 3.0]
     }
     
-    motif = Motif(counts=counts)
+    motif = Motif()
+    motif._init_with_counts(counts)
     motif.set_pseudocounts(0.25)
     pwm = motif.pwm
     
@@ -383,7 +374,8 @@ def test_motif_pssm():
         "T": [0.0, 0.0, 0.0, 0.0]
     }
     
-    motif = Motif(counts=counts)
+    motif = Motif()
+    motif._init_with_counts(counts)
     motif.set_background({"A": 0.25, "C": 0.25, "G": 0.25, "T": 0.25})
     motif.set_pseudocounts(0.01)  # Small pseudocount to avoid -inf
     
@@ -445,13 +437,14 @@ def test_motif_reverse_complement_dna():
         "T": [0.0, 0.0, 0.0, 0.0]
     }
     
-    motif = Motif(counts=counts)
+    motif = Motif()
+    motif._init_with_counts(counts)
     rc = motif.reverse_complement()
     
     # Check reversed and complemented counts
-    assertEqual(rc._counts.data["T"][3], 3.0)  # A at pos 0 -> T at pos 3
-    assertEqual(rc._counts.data["G"][2], 3.0)  # C at pos 1 -> G at pos 2
-    assertEqual(rc._counts.data["C"][1], 3.0)  # G at pos 2 -> C at pos 1
+    assertEqual(rc._count_data["T"][3], 3.0)  # A at pos 0 -> T at pos 3
+    assertEqual(rc._count_data["G"][2], 3.0)  # C at pos 1 -> G at pos 2
+    assertEqual(rc._count_data["C"][1], 3.0)  # G at pos 2 -> C at pos 1
 
 @test
 def test_motif_reverse_complement_preserves_properties():
@@ -492,13 +485,14 @@ def test_motif_slicing():
         "T": [0.0, 0.0, 0.0, 1.0, 0.0]
     }
     
-    motif = Motif(counts=counts)
+    motif = Motif()
+    motif._init_with_counts(counts)
     sliced = motif.__getitem__(1, 4)
     
     assertEqual(sliced.length, 3)
-    assertEqual(sliced._counts.data["A"][0], 2.0)
-    assertEqual(sliced._counts.data["A"][1], 3.0)
-    assertEqual(sliced._counts.data["A"][2], 4.0)
+    assertEqual(sliced._count_data["A"][0], 2.0)
+    assertEqual(sliced._count_data["A"][1], 3.0)
+    assertEqual(sliced._count_data["A"][2], 4.0)
 
 @test
 def test_motif_slicing_preserves_properties():
@@ -511,16 +505,13 @@ def test_motif_slicing_preserves_properties():
     
     sliced = motif.__getitem__(2, 5)
     
-    # Check mask is sliced
     assertEqual(len(sliced.mask), 3)
     assertEqual(sliced.mask[0], 1)
     assertEqual(sliced.mask[1], 1)
     assertEqual(sliced.mask[2], 0)
     
-    # Check pseudocounts preserved
     assertAlmostEqual(sliced.pseudocounts["A"], 0.25)
     
-    # Check background preserved
     assertAlmostEqual(sliced.background["G"], 0.225)
 
 # ============================================================================
@@ -537,7 +528,8 @@ def test_motif_relative_entropy():
         "T": [0.0, 0.0, 0.0, 4.0]
     }
     
-    motif = Motif(counts=counts)
+    motif = Motif()
+    motif._init_with_counts(counts)
     motif.set_background({"A": 0.25, "C": 0.25, "G": 0.25, "T": 0.25})
     motif.set_pseudocounts(0.0)
     
@@ -557,7 +549,8 @@ def test_motif_relative_entropy_uniform():
         "T": [1.0, 1.0, 1.0, 1.0]
     }
     
-    motif = Motif(counts=counts)
+    motif = Motif()
+    motif._init_with_counts(counts)
     motif.set_background({"A": 0.25, "C": 0.25, "G": 0.25, "T": 0.25})
     
     entropy = motif.relative_entropy
@@ -575,7 +568,8 @@ def test_motif_str_with_alignment():
     """Test string representation of motif with alignment."""
     sequences = ["ACGT", "TGCA"]
     align = SimpleAlignment(sequences)
-    motif = Motif(alignment=align)
+    motif = Motif()
+    motif._init_with_alignment(align)
     
     str_repr = str(motif)
     assertEqual(str_repr, "ACGT\nTGCA")
@@ -584,7 +578,8 @@ def test_motif_str_with_alignment():
 def test_motif_str_without_alignment():
     """Test string representation of motif without alignment."""
     counts = {"A": [1.0], "C": [0.0], "G": [0.0], "T": [0.0]}
-    motif = Motif(counts=counts)
+    motif = Motif()
+    motif._init_with_counts(counts)
     
     str_repr = str(motif)
     assertEqual(str_repr, "")
@@ -599,7 +594,8 @@ def test_motif_len():
         "T": [0.0, 0.0, 0.0]
     }
     
-    motif = Motif(counts=counts)
+    motif = Motif()
+    motif._init_with_counts(counts)
     assertEqual(len(motif), 3)
 
 # ============================================================================
@@ -615,7 +611,8 @@ def test_motif_empty_no_operations():
     assertEqual(motif.consensus, "")
     assertEqual(motif.anticonsensus, "")
     assertEqual(motif.degenerate_consensus, "")
-    assertEqual(motif.relative_entropy, [])
+    entropy = motif.relative_entropy
+    assertEqual(len(entropy), 0)
 
 @test
 def test_motif_invalid_mask_length():
@@ -668,18 +665,107 @@ def test_motif_background_normalization():
     assertAlmostEqual(background["A"], 0.25)
 
 # ============================================================================
-# Run all tests
+# Test Runner Functions
 # ============================================================================
 
-print("Running Bio.motifs test suite...")
-print("SimpleAlignment tests passed")
-print("Motif initialization tests passed")
-print("Motif property tests passed")
-print("Motif matrix tests passed")
-print("Motif consensus tests passed")
-print("Motif reverse complement tests passed")
-print("Motif slicing tests passed")
-print("Motif relative entropy tests passed")
-print("Motif string representation tests passed")
-print("Edge case and error handling tests passed")
-print("\nAll tests passed successfully!")
+def run_simple_alignment_tests():
+    """Run SimpleAlignment tests"""
+    test_simple_alignment_init()
+    test_simple_alignment_different_lengths()
+    test_simple_alignment_empty()
+    test_simple_alignment_frequencies()
+    test_simple_alignment_slice()
+    test_simple_alignment_reverse_complement()
+    test_simple_alignment_str()
+
+def run_motif_initialization_tests():
+    """Run Motif initialization tests"""
+    test_motif_init_empty()
+    test_motif_init_with_alignment()
+    test_motif_init_with_counts()
+    test_motif_create_function()
+
+def run_motif_property_tests():
+    """Run Motif property tests"""
+    test_motif_mask_default()
+    test_motif_mask_string()
+    test_motif_mask_list()
+    test_motif_pseudocounts_default()
+    test_motif_pseudocounts_single_value()
+    test_motif_pseudocounts_dict()
+    test_motif_background_default()
+    test_motif_background_gc_content()
+    test_motif_background_dict()
+
+def run_motif_matrix_tests():
+    """Run Motif matrix tests"""
+    test_motif_pwm()
+    test_motif_pwm_with_pseudocounts()
+    test_motif_pssm()
+
+def run_motif_consensus_tests():
+    """Run Motif consensus tests"""
+    test_motif_consensus()
+    test_motif_anticonsensus()
+    test_motif_degenerate_consensus()
+
+def run_motif_reverse_complement_tests():
+    """Run Motif reverse complement tests"""
+    test_motif_reverse_complement_dna()
+    test_motif_reverse_complement_preserves_properties()
+
+def run_motif_slicing_tests():
+    """Run Motif slicing tests"""
+    test_motif_slicing()
+    test_motif_slicing_preserves_properties()
+
+def run_motif_relative_entropy_tests():
+    """Run Motif relative entropy tests"""
+    test_motif_relative_entropy()
+    test_motif_relative_entropy_uniform()
+
+def run_motif_string_representation_tests():
+    """Run Motif string representation tests"""
+    test_motif_str_with_alignment()
+    test_motif_str_without_alignment()
+    test_motif_len()
+
+def run_edge_case_and_error_handling_tests():
+    """Run edge case and error handling tests"""
+    test_motif_empty_no_operations()
+    test_motif_invalid_mask_length()
+    test_motif_invalid_mask_string()
+    test_motif_reverse_complement_protein_fails()
+    test_motif_background_normalization()
+
+def run_all_tests():
+    """Run all test functions"""
+    print("Running __init__.codon Tests....")
+    
+    try:
+        run_simple_alignment_tests()
+        run_motif_initialization_tests()
+        run_motif_property_tests()
+        run_motif_matrix_tests()
+        run_motif_consensus_tests()
+        run_motif_reverse_complement_tests()
+        run_motif_slicing_tests()
+        run_motif_relative_entropy_tests()
+        run_motif_string_representation_tests()
+        run_edge_case_and_error_handling_tests()
+        
+        print("__INIT__.codon TESTS PASSED")
+        print("Classes tested:")
+        print("  SimpleAlignment")
+        print("  Motif")
+        print("  FrequencyPositionMatrix")
+        print("  PositionWeightMatrix")  
+        print("  PositionSpecificScoringMatrix")
+        print("=" * 60)
+        
+    except Exception as e:
+        print("Tests failed:", str(e))
+        raise
+
+if __name__ == "__main__":
+    run_all_tests()

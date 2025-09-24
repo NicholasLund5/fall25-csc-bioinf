@@ -706,36 +706,28 @@ def test_different_precision_consistency():
 # ============================================================================
 # Test Runner Functions
 # ============================================================================
-
 def run_initialization_tests():
     """Run initialization tests."""
-    print("=== Running Initialization Tests ===")
     test_score_distribution_init_motif()
     test_score_distribution_init_pssm()
     test_score_distribution_invalid_init()
     test_score_distribution_precision()
-    print("Initialization tests passed")
 
 def run_threshold_tests():
     """Run threshold calculation tests."""
-    print("=== Running Threshold Calculation Tests ===")
     test_threshold_fpr_basic()
     test_threshold_fnr_basic()
     test_threshold_balanced()
     test_threshold_patser()
     test_threshold_comparisons()
-    print("Threshold calculation tests passed")
 
 def run_modification_tests():
     """Run score distribution modification tests."""
-    print("=== Running Modification Tests ===")
     test_modify_basic()
     test_modify_probability_conservation()
-    print("Modification tests passed")
 
 def run_edge_case_tests():
     """Run edge case tests."""
-    print("=== Running Edge Case Tests ===")
     test_extreme_fpr_values()
     test_extreme_fnr_values()
     test_zero_information_content()
@@ -743,36 +735,28 @@ def run_edge_case_tests():
     test_zero_counts()
     test_very_small_precision()
     test_boundary_index_calculations()
-    print("Edge case tests passed")
 
 def run_accuracy_tests():
     """Run mathematical accuracy tests."""
-    print("=== Running Accuracy Tests ===")
     test_score_bounds()
     test_density_normalization()
     test_threshold_monotonicity()
     test_precision_effect()
-    print("Accuracy tests passed")
 
 def run_integration_tests():
     """Run integration tests."""
-    print("=== Running Integration Tests ===")
     test_integration_with_minimal_motif()
     test_rna_motif_compatibility()
     test_multiple_thresholds_workflow()
-    print("Integration tests passed")
 
 def run_performance_tests():
     """Run performance and scaling tests."""
-    print("=== Running Performance Tests ===")
     test_large_motif_handling()
     test_different_precision_consistency()
-    print("Performance tests passed")
 
 def run_all_tests():
     """Run all test functions."""
-    print("Starting Comprehensive Bio.motifs.thresholds Tests")
-    print("=" * 60)
+    print("Running THRESHOLDS.codon Tests....")
     
     try:
         run_initialization_tests()
@@ -783,12 +767,10 @@ def run_all_tests():
         run_integration_tests()
         run_performance_tests()
         
-        print("=" * 60)
-        print("ALL TESTS PASSED!")
-        print("Coverage: Complete Bio.motifs.thresholds module functionality")
+        print("THRESHOLDS.codon TESTS PASSED!")
         print("Classes tested:")
-        print("  ScoreDistribution (complete)")
-        print("  MockPSSM (test helper)")
+        print("  ScoreDistribution")
+        print("  MockPSSM")
         print("Features tested:")
         print("  Score distribution calculation with dynamic programming")
         print("  FPR/FNR/Balanced/Patser threshold calculations")
