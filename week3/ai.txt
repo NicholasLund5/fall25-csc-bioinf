@@ -1,0 +1,19 @@
+claude sonnet 4.5
+1.
+remove all functions/code in these phylo package files [nj.py, tree.py, upgma.py, __init.py] that are not required for this test file [test_phylo.py]
+
+2.
+convert these 3 files from cython to python [nj.py, tree.py, upgma.py]
+
+3.
+Convert the following 4 Python files to Codon-compatible syntax: [tree.py, nj.py, upgma.py, test_phylo.py]
+Produce fully functional and compilable codon code matching python behavior exactly
+Rules: 
+IMPORTS: 1. Import numpy types and functions as needed from numpy module 2. Import typing utilities as needed: List, Optional, Tuple, Union 3. Remove copy and pytest imports 4. Remove os.path imports, use string paths like "../data/file.txt" 5. Change "import numpy as np" to "from python import numpy as np"
+TYPES: 1. Add type hints to all functions, methods, class attributes, and key variables 2. Use Optional[Type] for nullable values 3. Ensure consistent types in collections, no mixing 4. Use explicit conversions: float(), int()
+NUMPY OPERATIONS: 1. Replace np.allclose with manual loop checking abs(a - b) < tolerance 2. Replace np.isnan().any() with loop using x != x 3. Replace np.count_nonzero with counting loop 4. Replace np.where with search loop 5. Replace np.finfo(np.float32).max with 3.4028235e+38 6. Keep basic operations: .astype(), .shape, indexing
+REMOVE: 1. Base classes like Copyable 2. copy.copy() calls, use list comprehensions 3. frozenset comparisons, use direct equality 4. pytest decorators and fixtures 5. assert statements, use if/raise AssertionError
+TESTS: 1. Convert fixtures to regular functions 2. Replace pytest.approx with manual tolerance checks 3. Use relative string paths 4. Keep main() calling tests directly
+EXCEPTIONS: 1. Replace custom exceptions with ValueError 2. Keep other exception handling
+DATA STRUCTURES: 1. Use List[Type] for mutable collections 2. Build lists explicitly with type declarations 3. Prefer lists over tuples
+PATTERNS: 1. Check None explicitly before operations 2.Build collections with typed declarations 3. Use manual loops for counting and searching 4. Implement matrix checks with nested loops and early breaks

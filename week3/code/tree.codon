@@ -1,0 +1,404 @@
+# This source code is part of the Biotite package and is distributed
+# under the 3-Clause BSD License. Please see 'LICENSE.rst' for further
+# information.
+
+__author__ = "Patrick Kunzmann, Tom David Müller"
+__all__ = ["Tree", "TreeNode", "ValueError"]
+
+from python import numpy as np
+from numpy import ndarray, array, zeros, ones, full, float32, float64, int32, uint8, uint32, asarray
+from typing import List, Optional, Tuple, Union
+
+
+class TreeNode:
+    _is_root: bool
+    _distance: float
+    _parent: Optional[TreeNode]
+    _index: int
+    _children: List[TreeNode]
+    _has_children: bool
+    
+    def __init__(self, children = None, 
+                 distances = None, 
+                 index: Optional[int] = None) -> None:
+        self._is_root = False
+        self._distance = 0.0
+        self._parent = None
+        self._index = -1
+        self._children = []
+        self._has_children = False
+        
+        # Handle the three cases based on what parameters are provided
+        if index is not None:
+            # Leaf node case
+            if index < 0:
+                raise ValueError("Index cannot be negative")
+            if children is not None or distances is not None:
+                raise TypeError("Reference index and child nodes are mutually exclusive")
+            self._index = index
+            self._has_children = False
+        elif children is not None and distances is not None:
+            # Internal node case - both children and distances must be provided
+            # Type assertions to help Codon's type system
+            assert children is not None
+            assert distances is not None
+            
+            # Create temporary lists to collect validated children and distances
+            children_temp: List[TreeNode] = []
+            distances_temp: List[float] = []
+            
+            # Validate and collect children
+            for item in children:
+                if not isinstance(item, TreeNode):
+                    raise TypeError(f"Expected 'TreeNode', but got '{type(item).__name__}'")
+                children_temp.append(item)
+            
+            # Validate and collect distances
+            for item in distances:
+                if not isinstance(item, (float, int)):
+                    raise TypeError(f"Expected 'float' or 'int', but got '{type(item).__name__}'")
+                distances_temp.append(float(item))
+            
+            # Check lengths
+            children_len: int = len(children_temp)
+            distances_len: int = len(distances_temp)
+            
+            if children_len == 0:
+                raise ValueError("Intermediate nodes must at least contain one child node")
+            if children_len != distances_len:
+                raise ValueError("The number of children must equal the number of distances")
+            
+            # Check for duplicate children
+            for i in range(children_len):
+                for j in range(children_len):
+                    if i != j and children_temp[i] is children_temp[j]:
+                        raise ValueError("Two child nodes cannot be the same object")
+            
+            self._index = -1
+            self._children = children_temp
+            self._has_children = True
+            
+            # Set parent relationships
+            for i in range(children_len):
+                children_temp[i]._set_parent(self, distances_temp[i])
+        else:
+            raise TypeError("Either reference index (for terminal node) or child nodes including the distance (for intermediate node) must be set")
+    
+    def _set_parent(self, parent: TreeNode, distance: float) -> None:
+        if parent is None:
+            raise TypeError("Parent node cannot be None")
+        if self._parent is not None or self._is_root:
+            raise ValueError("Node already has a parent")
+        self._parent = parent
+        self._distance = distance
+    
+    def copy(self) -> TreeNode:
+        if self.is_leaf():
+            return TreeNode(index=self._index)
+        else:
+            distances: List[float] = []
+            for child in self._children:
+                distances.append(child._distance)
+            children_clones: List[TreeNode] = [child.copy() for child in self._children]
+            return TreeNode(children_clones, distances)
+
+    @property
+    def index(self) -> Optional[int]:
+        return None if self._index == -1 else self._index
+    
+    @property
+    def children(self):
+        return self._children if self._has_children else None
+    
+    @property
+    def parent(self) -> Optional[TreeNode]:
+        return self._parent
+    
+    @property
+    def distance(self) -> Optional[float]:
+        return None if self._parent is None else self._distance
+
+    def is_leaf(self) -> bool:
+        return not self._has_children
+    
+    def is_root(self) -> bool:
+        return bool(self._is_root)
+    
+    def as_root(self) -> None:
+        if self._parent is not None:
+            raise ValueError("Node has parent, cannot be a root node")
+        self._is_root = True
+    
+    def distance_to(self, node: TreeNode, topological: bool = False) -> float:
+        distance: float = 0.0
+        lca: Optional[TreeNode] = self.lowest_common_ancestor(node)
+        if lca is None:
+            raise ValueError("The nodes do not have a common ancestor")
+        
+        current_node: TreeNode = self
+        while current_node is not lca:
+            if topological:
+                distance += 1.0
+            else:
+                distance += current_node._distance
+            current_node = current_node._parent
+        
+        current_node = node
+        while current_node is not lca:
+            if topological:
+                distance += 1.0
+            else:
+                distance += current_node._distance
+            current_node = current_node._parent
+        
+        return distance
+    
+    def lowest_common_ancestor(self, node: TreeNode) -> Optional[TreeNode]:
+        lca: Optional[TreeNode] = None
+        self_path: List[TreeNode] = _create_path_to_root(self)
+        other_path: List[TreeNode] = _create_path_to_root(node)
+        
+        for i in range(-1, -min(len(self_path), len(other_path)) - 1, -1):
+            if self_path[i] is other_path[i]:
+                lca = self_path[i]
+            else:
+                break
+        return lca
+
+    def get_leaves(self) -> List[TreeNode]:
+        leaf_list: List[TreeNode] = []
+        _get_leaves(self, leaf_list)
+        return leaf_list
+    
+    @staticmethod
+    def from_newick(newick: str, labels = None) -> Tuple[TreeNode, float]:
+        # Remove all whitespace
+        cleaned: str = ""
+        for c in newick:
+            if c != ' ' and c != '\t' and c != '\n' and c != '\r':
+                cleaned += c
+        newick = cleaned
+
+        subnewick_start_i: int = -1
+        subnewick_stop_i: int = -1
+        
+        for i in range(len(newick)):
+            char: str = newick[i]
+            if char == "(":
+                subnewick_start_i = i
+                break
+            if char == ")":
+                raise ValueError("Bracket closed before it was opened")
+        
+        for i in range(len(newick) - 1, -1, -1):
+            char: str = newick[i]
+            if char == ")":
+                subnewick_stop_i = i + 1
+                break
+            if char == "(":
+                raise ValueError("Bracket was opened but not closed")
+        
+        if subnewick_start_i == -1 and subnewick_stop_i == -1:
+            # Leaf node
+            label_and_distance: str = newick
+            distance: float = 0.0
+            label: str = ""
+            
+            colon_pos: int = -1
+            for i in range(len(label_and_distance)):
+                if label_and_distance[i] == ':':
+                    colon_pos = i
+                    break
+            
+            if colon_pos != -1:
+                label = label_and_distance[:colon_pos]
+                dist_str: str = label_and_distance[colon_pos + 1:]
+                distance = float(dist_str)
+            else:
+                label = label_and_distance
+            
+            index: int = int(label) if labels is None else labels.index(label)
+            return TreeNode(index=index), distance
+        
+        else:
+            # Internal node
+            distance: float = 0.0
+            if subnewick_stop_i < len(newick):
+                label_and_distance: str = newick[subnewick_stop_i:]
+                colon_pos: int = -1
+                for i in range(len(label_and_distance)):
+                    if label_and_distance[i] == ':':
+                        colon_pos = i
+                        break
+                
+                if colon_pos != -1:
+                    dist_str: str = label_and_distance[colon_pos + 1:]
+                    distance = float(dist_str)
+            
+            subnewick: str = newick[subnewick_start_i + 1 : subnewick_stop_i - 1]
+            if len(subnewick) == 0:
+                raise ValueError("Intermediate node must at least have one child")
+            
+            # Find comma positions at the same nesting level
+            comma_pos: List[int] = []
+            level: int = 0
+            for i in range(len(subnewick)):
+                char: str = subnewick[i]
+                if char == "(":
+                    level += 1
+                elif char == ")":
+                    level -= 1
+                elif char == ",":
+                    if level == 0:
+                        comma_pos.append(i)
+                if level < 0:
+                    raise ValueError("Bracket closed before it was opened")
+        
+            children: List[TreeNode] = []
+            distances: List[float] = []
+            
+            # Parse each child
+            start_pos: int = 0
+            for pos in comma_pos:
+                child_str: str = subnewick[start_pos:pos]
+                child: TreeNode
+                dist: float
+                child, dist = TreeNode.from_newick(child_str, labels=labels)
+                children.append(child)
+                distances.append(dist)
+                start_pos = pos + 1
+            
+            # Parse last child
+            child_str: str = subnewick[start_pos:]
+            child, dist = TreeNode.from_newick(child_str, labels=labels)
+            children.append(child)
+            distances.append(dist)
+            
+            return TreeNode(children, distances), distance
+
+    def __str__(self) -> str:
+        if self.is_leaf():
+            return str(self._index)
+        else:
+            parts: List[str] = []
+            for child in self._children:
+                parts.append(str(child))
+            return "(" + ",".join(parts) + ")"
+    
+    def __eq__(self, item: TreeNode) -> bool:
+        if not isinstance(item, TreeNode):
+            return False
+        node: TreeNode = item
+        if self._distance != node._distance:
+            return False
+        if not self._has_children:
+            if self._index != node._index:
+                return False
+        else:
+            if not node._has_children:
+                return False
+            if len(self._children) != len(node._children):
+                return False
+            # Check if all children match (order-independent)
+            for child in self._children:
+                found = False
+                for other_child in node._children:
+                    if child == other_child:
+                        found = True
+                        break
+                if not found:
+                    return False
+        return True
+    
+    def __hash__(self) -> int:
+        return hash((self._index, self._distance))
+
+
+def _get_leaves(node: TreeNode, leaf_list: List[TreeNode]) -> None:
+    if node._has_children:
+        for child in node._children:
+            _get_leaves(child, leaf_list)
+    else:
+        leaf_list.append(node)
+
+
+def _create_path_to_root(node: TreeNode) -> List[TreeNode]:
+    path: List[TreeNode] = []
+    current_node: Optional[TreeNode] = node
+    while current_node is not None:
+        path.append(current_node)
+        current_node = current_node._parent
+    return path
+
+
+class Tree:
+    _root: TreeNode
+    _leaves: List[TreeNode]
+    
+    def __init__(self, root: TreeNode) -> None:
+        if root is None:
+            raise TypeError("Root node cannot be None")
+        root.as_root()
+        self._root = root
+        
+        leaves_unsorted: List[TreeNode] = self._root.get_leaves()
+        leaf_count: int = len(leaves_unsorted)
+        
+        if leaf_count == 0:
+            raise ValueError("Tree has no leaves")
+        
+        # Build a simple list and fill it
+        self._leaves = []
+        for _ in range(leaf_count):
+            self._leaves.append(leaves_unsorted[0])  # Placeholder
+        
+        for leaf in leaves_unsorted:
+            idx: Optional[int] = leaf.index
+            if idx is None:
+                raise ValueError("Leaf node has no index")
+            index: int = idx
+            if index >= leaf_count or index < 0:
+                raise ValueError("The tree's indices are out of range")
+            self._leaves[index] = leaf
+    
+    def copy(self) -> Tree:
+        return Tree(self._root.copy())
+    
+    @property
+    def root(self) -> TreeNode:
+        return self._root
+    
+    @property
+    def leaves(self) -> List[TreeNode]:
+        return [leaf for leaf in self._leaves]
+
+    def get_distance(self, index1: int, index2: int, topological: bool = False) -> float:
+        return self._leaves[index1].distance_to(
+            self._leaves[index2], topological
+        )
+    
+    @staticmethod
+    def from_newick(newick: str, labels = None) -> Tree:
+        newick = newick.strip()
+        if len(newick) == 0:
+            raise ValueError("Newick string is empty")
+        if newick[-1] == ";":
+            newick = newick[:-1]
+        root: TreeNode
+        distance: float
+        root, distance = TreeNode.from_newick(newick, labels)
+        return Tree(root)
+
+    def __str__(self) -> str:
+        return str(self._root)
+    
+    def __len__(self) -> int:
+        return len(self._leaves)
+    
+    def __eq__(self, item: Tree) -> bool:
+        if not isinstance(item, Tree):
+            return False
+        return self._root == item._root
+    
+    def __hash__(self) -> int:
+        return hash(self._root)
