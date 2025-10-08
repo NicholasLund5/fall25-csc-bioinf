@@ -11,4 +11,11 @@ Step 2 (Codon Port):
 Step 3 (Evalutate.sh):
    Very similar to deliverable 1, just run both python and codon tests
 
+
+All tests:
+test_distances
+test_upgma
+test_neighbor_joining
+Have been ported and are working in both Codon and Python
+
 Time to complete: 8 hours (ish)
