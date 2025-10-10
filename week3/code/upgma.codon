@@ -1,0 +1,156 @@
+# This source code is part of the Biotite package and is distributed
+# under the 3-Clause BSD License. Please see 'LICENSE.rst' for further
+# information.
+
+__author__ = "Patrick Kunzmann"
+__all__ = ["upgma"]
+
+from python import numpy as np
+from numpy import ndarray, array, zeros, ones, full, float32, float64, int32, uint8, uint32, asarray
+from typing import List, Optional
+from tree import Tree, TreeNode
+
+
+MAX_FLOAT: float32 = float32(3.4028235e+38)
+
+
+def upgma(distances: ndarray) -> Tree:
+    # Convert to float32 immediately to avoid type issues
+    distances_mat = asarray(distances).astype(float32, copy=True)
+    
+    # Check if distance matrix is symmetric
+    is_symmetric: bool = True
+    for i in range(distances_mat.shape[0]):
+        for j in range(distances_mat.shape[1]):
+            if abs(distances_mat[i, j] - distances_mat[j, i]) >= float32(1e-8):
+                is_symmetric = False
+                break
+        if not is_symmetric:
+            break
+    
+    if distances_mat.shape[0] != distances_mat.shape[1] or not is_symmetric:
+        raise ValueError("Distance matrix must be symmetric")
+    
+    # Check for NaN values
+    has_nan: bool = False
+    for i in range(distances_mat.shape[0]):
+        for j in range(distances_mat.shape[1]):
+            if distances_mat[i, j] != distances_mat[i, j]:  # NaN check
+                has_nan = True
+                break
+        if has_nan:
+            break
+    
+    if has_nan:
+        raise ValueError("Distance matrix contains NaN values")
+    
+    # Check for infinity
+    has_inf: bool = False
+    for i in range(distances_mat.shape[0]):
+        for j in range(distances_mat.shape[1]):
+            if distances_mat[i, j] >= MAX_FLOAT:
+                has_inf = True
+                break
+        if has_inf:
+            break
+    
+    if has_inf:
+        raise ValueError("Distance matrix contains infinity")
+    
+    # Check for negative distances
+    has_negative: bool = False
+    for i in range(distances_mat.shape[0]):
+        for j in range(distances_mat.shape[1]):
+            if distances_mat[i, j] < float32(0.0):
+                has_negative = True
+                break
+        if has_negative:
+            break
+    
+    if has_negative:
+        raise ValueError("Distances must be positive")
+
+    n: int = distances_mat.shape[0]
+
+    # Create temporary list to avoid type issues
+    nodes_list: List[TreeNode] = []
+    for i in range(n):
+        nodes_list.append(TreeNode(index=i))
+    
+    nodes = array(nodes_list)
+    is_clustered = full(n, False, dtype=uint8)
+    cluster_size = ones(n, dtype=uint32)
+    node_heights = zeros(n, dtype=float32)
+    
+    while True:
+        # Find minimum distance
+        dist_min: float32 = MAX_FLOAT
+        i_min: int = -1
+        j_min: int = -1
+        for i in range(n):
+            if is_clustered[i]:
+                continue
+            for j in range(i):
+                if is_clustered[j]:
+                    continue
+                dist: float32 = distances_mat[i, j]
+                if dist < dist_min:
+                    dist_min = dist
+                    i_min = i
+                    j_min = j
+        
+        if i_min == -1 or j_min == -1:
+            break
+        
+        height: float32 = dist_min / float32(2.0)
+        
+        # Create lists for children and distances
+        # Explicitly check that nodes are not None
+        node_i: TreeNode = nodes[i_min]
+        node_j: TreeNode = nodes[j_min]
+        
+        if node_i is None or node_j is None:
+            raise ValueError("Node is None when it should not be")
+        
+        children_list: List[TreeNode] = [node_i, node_j]
+        distances_list: List[float] = [
+            float(height - node_heights[i_min]), 
+            float(height - node_heights[j_min])
+        ]
+        
+        nodes[i_min] = TreeNode(children_list, distances_list)
+        node_heights[i_min] = height
+        nodes[j_min] = None
+        is_clustered[j_min] = True
+        
+        # Calculate arithmetic mean distances
+        for k in range(n):
+            if not is_clustered[k] and k != i_min:
+                size_i: float = float(cluster_size[i_min])
+                size_j: float = float(cluster_size[j_min])
+                mean: float32 = float32(
+                    (
+                        float(distances_mat[i_min, k]) * size_i
+                        + float(distances_mat[j_min, k]) * size_j
+                    ) / (size_i + size_j)
+                )
+                distances_mat[i_min, k] = mean
+                distances_mat[k, i_min] = mean
+        
+        cluster_size[i_min] = cluster_size[i_min] + cluster_size[j_min]
+
+    # Find the root node (last unclustered node)
+    root_idx: int = -1
+    for i in range(n):
+        if not is_clustered[i]:
+            root_idx = i
+            break
+    
+    if root_idx == -1:
+        raise ValueError("Could not find root node")
+    
+    root_node: TreeNode = nodes[root_idx]
+    if root_node is None:
+        raise ValueError("Root node is None")
+    
+    return Tree(root_node)

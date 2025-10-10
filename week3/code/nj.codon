@@ -1,0 +1,206 @@
+# This source code is part of the Biotite package and is distributed
+# under the 3-Clause BSD License. Please see 'LICENSE.rst' for further
+# information.
+
+__author__ = "Patrick Kunzmann"
+__all__ = ["neighbor_joining"]
+
+from python import numpy as np
+from numpy import ndarray, array, zeros, ones, full, float32, float64, int32, uint8, uint32, asarray
+from typing import List, Optional
+
+from tree import Tree, TreeNode, ValueError
+
+
+MAX_FLOAT: float32 = float32(3.4028235e+38)
+
+
+def neighbor_joining(distances: ndarray) -> Tree:
+    distances = asarray(distances).astype(float32, copy=True)
+    
+    # Check if distance matrix is symmetric
+    is_symmetric: bool = True
+    for i in range(distances.shape[0]):
+        for j in range(distances.shape[1]):
+            if abs(distances[i, j] - distances[j, i]) >= float32(1e-8):
+                is_symmetric = False
+                break
+        if not is_symmetric:
+            break
+    
+    if distances.shape[0] != distances.shape[1] or not is_symmetric:
+        raise ValueError("Distance matrix must be symmetric")
+    
+    # Check for NaN values
+    has_nan: bool = False
+    for i in range(distances.shape[0]):
+        for j in range(distances.shape[1]):
+            if distances[i, j] != distances[i, j]:  # NaN check
+                has_nan = True
+                break
+        if has_nan:
+            break
+    
+    if has_nan:
+        raise ValueError("Distance matrix contains NaN values")
+    
+    # Check for infinity
+    has_inf: bool = False
+    for i in range(distances.shape[0]):
+        for j in range(distances.shape[1]):
+            if distances[i, j] >= MAX_FLOAT:
+                has_inf = True
+                break
+        if has_inf:
+            break
+    
+    if has_inf:
+        raise ValueError("Distance matrix contains infinity")
+    
+    # Check for negative distances
+    has_negative: bool = False
+    for i in range(distances.shape[0]):
+        for j in range(distances.shape[1]):
+            if distances[i, j] < float32(0.0):
+                has_negative = True
+                break
+        if has_negative:
+            break
+    
+    if has_negative:
+        raise ValueError("Distances must be positive")
+    
+    if distances.shape[0] < 4:
+        raise ValueError("At least 4 nodes are required")
+
+    n: int = distances.shape[0]
+    
+    # Create nodes list to avoid type issues
+    nodes_list: List[TreeNode] = []
+    for i in range(n):
+        nodes_list.append(TreeNode(index=i))
+    
+    nodes = array(nodes_list)
+    is_clustered = full(n, False, dtype=uint8)
+    
+    distances_mat = distances
+    divergence = zeros(n, dtype=float32)
+    corr_distances = zeros((n, n), dtype=float32)
+    
+    while True:
+        # Count remaining nodes
+        n_rem_nodes: int = 0
+        for i in range(n):
+            if not is_clustered[i]:
+                n_rem_nodes += 1
+        
+        if n_rem_nodes <= 1:
+            break
+        
+        # Calculate divergence (sum of distances)
+        for i in range(n):
+            if is_clustered[i]:
+                continue
+            dist_sum: float32 = float32(0.0)
+            for k in range(n):
+                if not is_clustered[k]:
+                    dist_sum += distances_mat[i, k]
+            divergence[i] = dist_sum
+        
+        # Calculate corrected distance matrix
+        for i in range(n):
+            if is_clustered[i]:
+                continue
+            for j in range(i):
+                if is_clustered[j]:
+                    continue
+                corr_distances[i, j] = float32(n_rem_nodes - 2) * distances_mat[i, j] - divergence[i] - divergence[j]
+        
+        # Find minimum corrected distance
+        dist_min: float32 = MAX_FLOAT
+        i_min: int = -1
+        j_min: int = -1
+        for i in range(n):
+            if is_clustered[i]:
+                continue
+            for j in range(i):
+                if is_clustered[j]:
+                    continue
+                dist: float32 = corr_distances[i, j]
+                if dist < dist_min:
+                    dist_min = dist
+                    i_min = i
+                    j_min = j
+        
+        if i_min == -1 or j_min == -1:
+            break
+        
+        # Calculate distances to new node
+        node_dist_i: float = float(float32(0.5) * (distances_mat[i_min, j_min] + (float32(1.0) / float32(n_rem_nodes - 2)) * (divergence[i_min] - divergence[j_min])))
+        node_dist_j: float = float(float32(0.5) * (distances_mat[i_min, j_min] + (float32(1.0) / float32(n_rem_nodes - 2)) * (divergence[j_min] - divergence[i_min])))
+        
+        if n_rem_nodes > 3:
+            # Create new internal node
+            node_i: TreeNode = nodes[i_min]
+            node_j: TreeNode = nodes[j_min]
+            
+            if node_i is None or node_j is None:
+                raise ValueError("Node is None when it should not be")
+            
+            children_list: List[TreeNode] = [node_i, node_j]
+            distances_list: List[float] = [node_dist_i, node_dist_j]
+            
+            nodes[i_min] = TreeNode(children_list, distances_list)
+            nodes[j_min] = None
+            is_clustered[j_min] = True
+        else:
+            # Last three nodes - create root with three children
+            # IMPORTANT: Save the actual node objects before marking as clustered
+            node_i: TreeNode = nodes[i_min]
+            node_j: TreeNode = nodes[j_min]
+            
+            # Mark them as clustered
+            is_clustered[i_min] = True
+            is_clustered[j_min] = True
+            
+            # Find the last unclustered node
+            k: int = -1
+            for idx in range(n):
+                if not is_clustered[idx]:
+                    k = idx
+                    break
+            
+            if k == -1:
+                raise ValueError("Could not find third node for root")
+            
+            node_k: TreeNode = nodes[k]
+            
+            if node_i is None or node_j is None or node_k is None:
+                raise ValueError("Node is None when creating root")
+            
+            node_dist_k: float = float(float32(0.5) * (distances_mat[i_min, k] + distances_mat[j_min, k] - distances_mat[i_min, j_min]))
+            
+            children_list: List[TreeNode] = [node_i, node_j, node_k]
+            distances_list: List[float] = [node_dist_i, node_dist_j, node_dist_k]
+            
+            root: TreeNode = TreeNode(children_list, distances_list)
+            return Tree(root)
+        
+        # Update distance matrix
+        for k in range(n):
+            if not is_clustered[k] and k != i_min:
+                dist: float32 = float32(0.5) * (distances_mat[i_min, k] + distances_mat[j_min, k] - distances_mat[i_min, j_min])
+                distances_mat[i_min, k] = dist
+                distances_mat[k, i_min] = dist
+    
+    # Find root node (should not reach here normally)
+    root_idx: int = -1
+    for i in range(n):
+        if not is_clustered[i]:
+            root_idx = i
+            break
+    
+    if root_idx == -1:
+        raise ValueError("Could not find root node")
+    
+    return Tree(nodes[root_idx])
