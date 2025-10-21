@@ -265,8 +265,8 @@ def main():
         t_seqs.append(seq)
     methods = ['global', 'local', 'semiglobal', 'affine']
     for method in methods:
-        runtime = run_alignment(method, mt_human, mt_orang, 'mt_human')
-        print(method + '-mt_human   python       ' + str(int(runtime)) + 'ms')
+        # runtime = run_alignment(method, mt_human, mt_orang, 'mt_human')
+        # print(method + '-mt_human   python       ' + str(int(runtime)) + 'ms')
         for i in range(5):
             runtime = run_alignment(method, q_seqs[i], t_seqs[i], f'q{i+1}')
             print(method + '-q' + str(i+1) + '         python       ' + str(int(runtime)) + 'ms')
