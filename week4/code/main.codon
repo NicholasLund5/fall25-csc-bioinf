@@ -1,0 +1,275 @@
+import time
+
+class AlignmentResult:
+    score: int
+    aligned_seq1: str
+    aligned_seq2: str
+    start1: int
+    end1: int
+    start2: int
+    end2: int
+    
+    def __init__(self, score: int, aligned_seq1: str, aligned_seq2: str, 
+                 start1: int = 0, end1: int = 0, start2: int = 0, end2: int = 0):
+        self.score = score
+        self.aligned_seq1 = aligned_seq1
+        self.aligned_seq2 = aligned_seq2
+        self.start1 = start1
+        self.end1 = end1
+        self.start2 = start2
+        self.end2 = end2
+
+def read_fasta(filename: str) -> tuple[str, str]:
+    with open(filename, 'r') as f:
+        lines = f.readlines()
+    header = ''
+    sequence = ''
+    for line in lines:
+        line = line.strip()
+        if line.startswith('>'):
+            header = line[1:]
+        else:
+            sequence += line
+    return header, sequence
+
+def read_multi_fasta(filename: str) -> list[tuple[str, str]]:
+    sequences: list[tuple[str, str]] = []
+    with open(filename, 'r') as f:
+        content = f.read()
+    blocks = content.split('>')
+    for block in blocks:
+        block = block.strip()
+        if not block:
+            continue
+        lines = block.split('\n')
+        header = lines[0].strip()
+        sequence = ''.join(line.strip() for line in lines[1:])
+        sequences.append((header, sequence))
+    return sequences
+
+def global_alignment(seq1: str, seq2: str, match: int = 1, mismatch: int = -1, gap: int = -2) -> AlignmentResult:
+    m = len(seq1)
+    n = len(seq2)
+    dp: list[list[int]] = [[0 for _ in range(n + 1)] for _ in range(m + 1)]
+    for i in range(m + 1):
+        dp[i][0] = i * gap
+    for j in range(n + 1):
+        dp[0][j] = j * gap
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            score_diag = dp[i-1][j-1] + (match if seq1[i-1] == seq2[j-1] else mismatch)
+            dp[i][j] = max(score_diag, dp[i-1][j] + gap, dp[i][j-1] + gap)
+    aligned1 = ''
+    aligned2 = ''
+    i = m
+    j = n
+    while i > 0 or j > 0:
+        if i > 0 and j > 0:
+            current_score = dp[i-1][j-1] + (match if seq1[i-1] == seq2[j-1] else mismatch)
+            if dp[i][j] == current_score:
+                aligned1 = seq1[i-1] + aligned1
+                aligned2 = seq2[j-1] + aligned2
+                i -= 1
+                j -= 1
+                continue
+        if i > 0 and dp[i][j] == dp[i-1][j] + gap:
+            aligned1 = seq1[i-1] + aligned1
+            aligned2 = '-' + aligned2
+            i -= 1
+        elif j > 0:
+            aligned1 = '-' + aligned1
+            aligned2 = seq2[j-1] + aligned2
+            j -= 1
+        else:
+            break
+    return AlignmentResult(dp[m][n], aligned1, aligned2, 0, m, 0, n)
+
+def local_alignment(seq1: str, seq2: str, match: int = 1, mismatch: int = -1, gap: int = -2) -> AlignmentResult:
+    m = len(seq1)
+    n = len(seq2)
+    dp: list[list[int]] = [[0 for _ in range(n + 1)] for _ in range(m + 1)]
+    max_score = 0
+    max_i = 0
+    max_j = 0
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            score_diag = dp[i-1][j-1] + (match if seq1[i-1] == seq2[j-1] else mismatch)
+            dp[i][j] = max(0, score_diag, dp[i-1][j] + gap, dp[i][j-1] + gap)
+            if dp[i][j] > max_score:
+                max_score = dp[i][j]
+                max_i = i
+                max_j = j
+    aligned1 = ''
+    aligned2 = ''
+    i = max_i
+    j = max_j
+    start_i = i
+    start_j = j
+    while i > 0 and j > 0 and dp[i][j] > 0:
+        current_score = dp[i-1][j-1] + (match if seq1[i-1] == seq2[j-1] else mismatch)
+        if dp[i][j] == current_score:
+            aligned1 = seq1[i-1] + aligned1
+            aligned2 = seq2[j-1] + aligned2
+            start_i = i
+            start_j = j
+            i -= 1
+            j -= 1
+        elif i > 0 and dp[i][j] == dp[i-1][j] + gap:
+            aligned1 = seq1[i-1] + aligned1
+            aligned2 = '-' + aligned2
+            start_i = i
+            i -= 1
+        elif j > 0 and dp[i][j] == dp[i][j-1] + gap:
+            aligned1 = '-' + aligned1
+            aligned2 = seq2[j-1] + aligned2
+            start_j = j
+            j -= 1
+        else:
+            break
+    return AlignmentResult(max_score, aligned1, aligned2, start_i-1, max_i, start_j-1, max_j)
+
+def semiglobal_alignment(seq1: str, seq2: str, match: int = 1, mismatch: int = -1, gap: int = -2) -> AlignmentResult:
+    m = len(seq1)
+    n = len(seq2)
+    dp: list[list[int]] = [[0 for _ in range(n + 1)] for _ in range(m + 1)]
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            score_diag = dp[i-1][j-1] + (match if seq1[i-1] == seq2[j-1] else mismatch)
+            dp[i][j] = max(score_diag, dp[i-1][j] + gap, dp[i][j-1] + gap)
+    max_score = dp[m][n]
+    max_i = m
+    max_j = n
+    for i in range(m + 1):
+        if dp[i][n] > max_score:
+            max_score = dp[i][n]
+            max_i = i
+            max_j = n
+    for j in range(n + 1):
+        if dp[m][j] > max_score:
+            max_score = dp[m][j]
+            max_i = m
+            max_j = j
+    aligned1 = ''
+    aligned2 = ''
+    i = max_i
+    j = max_j
+    while i > 0 and j > 0:
+        current_score = dp[i-1][j-1] + (match if seq1[i-1] == seq2[j-1] else mismatch)
+        if dp[i][j] == current_score:
+            aligned1 = seq1[i-1] + aligned1
+            aligned2 = seq2[j-1] + aligned2
+            i -= 1
+            j -= 1
+        elif i > 0 and dp[i][j] == dp[i-1][j] + gap:
+            aligned1 = seq1[i-1] + aligned1
+            aligned2 = '-' + aligned2
+            i -= 1
+        elif j > 0:
+            aligned1 = '-' + aligned1
+            aligned2 = seq2[j-1] + aligned2
+            j -= 1
+        else:
+            break
+    return AlignmentResult(max_score, aligned1, aligned2, i, max_i, j, max_j)
+
+def affine_gap_alignment(seq1: str, seq2: str, match: int = 1, mismatch: int = -1, 
+                        gap_open: int = -5, gap_extend: int = -1) -> AlignmentResult:
+    m = len(seq1)
+    n = len(seq2)
+    M: list[list[int]] = [[0 for _ in range(n + 1)] for _ in range(m + 1)]
+    Ix: list[list[int]] = [[0 for _ in range(n + 1)] for _ in range(m + 1)]
+    Iy: list[list[int]] = [[0 for _ in range(n + 1)] for _ in range(m + 1)]
+    NEG_INF = -1000000
+    M[0][0] = 0
+    Ix[0][0] = NEG_INF
+    Iy[0][0] = NEG_INF
+    for i in range(1, m + 1):
+        M[i][0] = NEG_INF
+        Ix[i][0] = gap_open + (i - 1) * gap_extend
+        Iy[i][0] = NEG_INF
+    for j in range(1, n + 1):
+        M[0][j] = NEG_INF
+        Ix[0][j] = NEG_INF
+        Iy[0][j] = gap_open + (j - 1) * gap_extend
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            match_score = match if seq1[i-1] == seq2[j-1] else mismatch
+            M[i][j] = match_score + max(M[i-1][j-1], Ix[i-1][j-1], Iy[i-1][j-1])
+            Ix[i][j] = max(M[i-1][j] + gap_open, Ix[i-1][j] + gap_extend)
+            Iy[i][j] = max(M[i][j-1] + gap_open, Iy[i][j-1] + gap_extend)
+    final_score = max(M[m][n], Ix[m][n], Iy[m][n])
+    aligned1 = ''
+    aligned2 = ''
+    i = m
+    j = n
+    if final_score == M[m][n]:
+        state = 0
+    elif final_score == Ix[m][n]:
+        state = 1
+    else:
+        state = 2
+    while i > 0 or j > 0:
+        if state == 0:
+            if i > 0 and j > 0:
+                match_score = match if seq1[i-1] == seq2[j-1] else mismatch
+                if M[i][j] == match_score + M[i-1][j-1]:
+                    state = 0
+                elif M[i][j] == match_score + Ix[i-1][j-1]:
+                    state = 1
+                else:
+                    state = 2
+                aligned1 = seq1[i-1] + aligned1
+                aligned2 = seq2[j-1] + aligned2
+                i -= 1
+                j -= 1
+            else:
+                break
+        elif state == 1:
+            aligned1 = seq1[i-1] + aligned1
+            aligned2 = '-' + aligned2
+            state = 0 if Ix[i][j] == M[i-1][j] + gap_open else 1
+            i -= 1
+        else:
+            aligned1 = '-' + aligned1
+            aligned2 = seq2[j-1] + aligned2
+            state = 0 if Iy[i][j] == M[i][j-1] + gap_open else 2
+            j -= 1
+    return AlignmentResult(final_score, aligned1, aligned2, 0, m, 0, n)
+
+def run_alignment(method: str, seq1: str, seq2: str, label: str):
+    start = time.time()
+    if method == 'global':
+        global_alignment(seq1, seq2, match=3, mismatch=-3, gap=-2)
+    elif method == 'local':
+        local_alignment(seq1, seq2, match=3, mismatch=-3, gap=-2)
+    elif method == 'semiglobal':
+        semiglobal_alignment(seq1, seq2, match=3, mismatch=-3, gap=-2)
+    elif method == 'affine':
+        affine_gap_alignment(seq1, seq2, match=3, mismatch=-3, gap_open=-5, gap_extend=-1)
+    else:
+        return 0.0
+    end = time.time()
+    return (end - start) * 1000.0
+
+def main():
+    data_dir = '../data/'
+    _, mt_human = read_fasta(data_dir + 'MT-human.fa')
+    _, mt_orang = read_fasta(data_dir + 'MT-orang.fa')
+    q_sequences = read_multi_fasta(data_dir + 'q1.fa')
+    t_sequences = read_multi_fasta(data_dir + 't1.fa')
+    q_seqs: list[str] = []
+    t_seqs: list[str] = []
+    for _, seq in q_sequences:
+        q_seqs.append(seq)
+    for _, seq in t_sequences:
+        t_seqs.append(seq)
+    methods = ['global', 'local', 'semiglobal', 'affine']
+    for method in methods:
+        runtime = run_alignment(method, mt_human, mt_orang, 'mt_human')
+        print(method + '-mt_human   codon       ' + str(int(runtime)) + 'ms')
+        for i in range(5):
+            runtime = run_alignment(method, q_seqs[i], t_seqs[i], f'q{i+1}')
+            print(method + '-q' + str(i+1) + '         codon       ' + str(int(runtime)) + 'ms')
+
+if __name__ == '__main__':
+    main()
