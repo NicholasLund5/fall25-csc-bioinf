@@ -12,7 +12,7 @@ Step 3 (Evalutate.sh):
    basically identical to week 3
 
 Pain point:
-   the python version was too slow for github. I had to only use the human/orang files for the global test in python and not the other tests
+   the python version was too slow for github. I had to skip the affine test for the python test
 
 All algorithms:
 test_distances

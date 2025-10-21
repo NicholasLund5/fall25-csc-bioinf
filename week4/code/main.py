@@ -266,6 +266,10 @@ def main():
     methods = ['global', 'local', 'semiglobal', 'affine']
     runtime = run_alignment('global', mt_human, mt_orang, 'mt_human')
     print('global' + '-mt_human   python       ' + str(int(runtime)) + 'ms')
+    runtime = run_alignment('local', mt_human, mt_orang, 'mt_human')
+    print('local' + '-mt_human   python       ' + str(int(runtime)) + 'ms')
+    runtime = run_alignment('semiglobal', mt_human, mt_orang, 'mt_human')
+    print('semiglobal' + '-mt_human   python       ' + str(int(runtime)) + 'ms')
     for method in methods:
         for i in range(5):
             runtime = run_alignment(method, q_seqs[i], t_seqs[i], f'q{i+1}')
