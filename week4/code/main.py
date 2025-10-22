@@ -176,90 +176,66 @@ def affine_gap_alignment(seq1: str, seq2: str, match: int = 1, mismatch: int = -
                         gap_open: int = -5, gap_extend: int = -1) -> AlignmentResult:
     m = len(seq1)
     n = len(seq2)
-    
-    NEG_INF = float('-inf')
-    
-    M: list[list[float]] = [[NEG_INF for _ in range(n + 1)] for _ in range(m + 1)]
-    Ix: list[list[float]] = [[NEG_INF for _ in range(n + 1)] for _ in range(m + 1)]
-    Iy: list[list[float]] = [[NEG_INF for _ in range(n + 1)] for _ in range(m + 1)]
-    
+    M: list[list[int]] = [[0 for _ in range(n + 1)] for _ in range(m + 1)]
+    Ix: list[list[int]] = [[0 for _ in range(n + 1)] for _ in range(m + 1)]
+    Iy: list[list[int]] = [[0 for _ in range(n + 1)] for _ in range(m + 1)]
+    NEG_INF = -1000000
     M[0][0] = 0
     Ix[0][0] = NEG_INF
     Iy[0][0] = NEG_INF
-    
     for i in range(1, m + 1):
         M[i][0] = NEG_INF
         Ix[i][0] = gap_open + (i - 1) * gap_extend
         Iy[i][0] = NEG_INF
-    
     for j in range(1, n + 1):
         M[0][j] = NEG_INF
         Ix[0][j] = NEG_INF
         Iy[0][j] = gap_open + (j - 1) * gap_extend
-    
     for i in range(1, m + 1):
         for j in range(1, n + 1):
             match_score = match if seq1[i-1] == seq2[j-1] else mismatch
             M[i][j] = match_score + max(M[i-1][j-1], Ix[i-1][j-1], Iy[i-1][j-1])
             Ix[i][j] = max(M[i-1][j] + gap_open, Ix[i-1][j] + gap_extend)
             Iy[i][j] = max(M[i][j-1] + gap_open, Iy[i][j-1] + gap_extend)
-    
-    final_score = max(M[m][n], Ix[m][n], Iy[m][n]) 
+    final_score = max(M[m][n], Ix[m][n], Iy[m][n])
     aligned1 = ''
     aligned2 = ''
     i = m
     j = n
-    
     if final_score == M[m][n]:
         state = 0
     elif final_score == Ix[m][n]:
         state = 1
     else:
         state = 2
-    
-    while i > 0 and j > 0:
+    while i > 0 or j > 0:
         if state == 0:
-            match_score = match if seq1[i-1] == seq2[j-1] else mismatch
-            if M[i][j] == match_score + M[i-1][j-1]:
-                state = 0
-            elif M[i][j] == match_score + Ix[i-1][j-1]:
-                state = 1
+            if i > 0 and j > 0:
+                match_score = match if seq1[i-1] == seq2[j-1] else mismatch
+                if M[i][j] == match_score + M[i-1][j-1]:
+                    state = 0
+                elif M[i][j] == match_score + Ix[i-1][j-1]:
+                    state = 1
+                else:
+                    state = 2
+                aligned1 = seq1[i-1] + aligned1
+                aligned2 = seq2[j-1] + aligned2
+                i -= 1
+                j -= 1
             else:
-                state = 2
-            aligned1 = seq1[i-1] + aligned1
-            aligned2 = seq2[j-1] + aligned2
-            i -= 1
-            j -= 1
-            
+                break
         elif state == 1:
             aligned1 = seq1[i-1] + aligned1
             aligned2 = '-' + aligned2
-            if Ix[i][j] == M[i-1][j] + gap_open:
-                state = 0
-            else:
-                state = 1
+            state = 0 if Ix[i][j] == M[i-1][j] + gap_open else 1
             i -= 1
-            
         else:
             aligned1 = '-' + aligned1
             aligned2 = seq2[j-1] + aligned2
-            if Iy[i][j] == M[i][j-1] + gap_open:
-                state = 0
-            else:
-                state = 2
+            state = 0 if Iy[i][j] == M[i][j-1] + gap_open else 2
             j -= 1
-    
-    while i > 0:
-        aligned1 = seq1[i-1] + aligned1
-        aligned2 = '-' + aligned2
-        i -= 1
-    
-    while j > 0:
-        aligned1 = '-' + aligned1
-        aligned2 = seq2[j-1] + aligned2
-        j -= 1
-    
-    return AlignmentResult(int(final_score), aligned1, aligned2, 0, m, 0, n)
+    return AlignmentResult(final_score, aligned1, aligned2, 0, m, 0, n)
+
 def run_alignment(method: str, seq1: str, seq2: str, label: str):
     start = time.time()
     if method == 'global':
@@ -287,7 +263,7 @@ def main():
         q_seqs.append(seq)
     for _, seq in t_sequences:
         t_seqs.append(seq)
-
+        
     runtime = run_alignment('global', mt_human, mt_orang, 'mt_human')
     print('global' + '-mt_human   python       ' + str(int(runtime)) + 'ms')
     runtime = run_alignment('local', mt_human, mt_orang, 'mt_human')
