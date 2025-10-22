@@ -53,5 +53,8 @@ jobs:
       #     CODON_PYTHON: ${{ env.CODON_PYTHON }}
       #   run: bash week2/evaluate.sh
 
-      - name: Week 3
-        run: bash week3/evaluate.sh
+      # - name: Week 3
+      #  run: bash week3/evaluate.sh
+
+      - name: Week 4
+        run: bash week4/evaluate.sh
