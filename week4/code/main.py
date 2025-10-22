@@ -270,8 +270,6 @@ def main():
     print('local' + '-mt_human   python       ' + str(int(runtime)) + 'ms')
     runtime = run_alignment('semiglobal', mt_human, mt_orang, 'mt_human')
     print('semiglobal' + '-mt_human   python       ' + str(int(runtime)) + 'ms')
-    runtime = run_alignment('affine', mt_human, mt_orang, 'mt_human')
-    print('affine' + '-mt_human   python       ' + str(int(runtime)) + 'ms')
 
     methods = ['global', 'local', 'semiglobal', 'affine']
     for method in methods:
