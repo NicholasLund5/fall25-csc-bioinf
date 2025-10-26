@@ -32,17 +32,17 @@ jobs:
       - name: Install bioinformatics tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget samtools bcftools tabix bzip2
+          sudo apt-get install -y wget samtools bcftools tabix bzip2 libhts-dev
 
           # Install minimap2
           wget https://github.com/lh3/minimap2/releases/download/v2.26/minimap2-2.26_x64-linux.tar.bz2
           tar -xjf minimap2-2.26_x64-linux.tar.bz2
           sudo cp minimap2-2.26_x64-linux/minimap2 /usr/local/bin/
 
-          # Install HapCUT2
+          # Install HapCUT2 using system htslib
           git clone --depth 1 https://github.com/vibansal/HapCUT2.git
           cd HapCUT2
-          make
+          make USE_HTSLIB=system
           sudo cp build/extractHAIRS /usr/local/bin/
           sudo cp build/HAPCUT2 /usr/local/bin/
           cd ..
