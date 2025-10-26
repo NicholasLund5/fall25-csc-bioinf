@@ -62,4 +62,4 @@ jobs:
       - name: Week 5 - Pharmacogenomics Analysis
         run: |
           cd week5
-          jupyter execute week5.ipynb --inplace
+          jupyter execute code/week5.ipynb --inplace
