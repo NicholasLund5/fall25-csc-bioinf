@@ -31,13 +31,14 @@ jobs:
       
       - name: Install bioinformatics tools
         run: |
+          sudo apt-get update
           sudo apt-get install -y wget samtools bcftools tabix bzip2
-          
+
           # Install minimap2
           wget https://github.com/lh3/minimap2/releases/download/v2.26/minimap2-2.26_x64-linux.tar.bz2
           tar -xjf minimap2-2.26_x64-linux.tar.bz2
           sudo cp minimap2-2.26_x64-linux/minimap2 /usr/local/bin/
-          
+
           # Install HapCUT2
           git clone --depth 1 https://github.com/vibansal/HapCUT2.git
           cd HapCUT2
@@ -45,14 +46,14 @@ jobs:
           sudo cp build/extractHAIRS /usr/local/bin/
           sudo cp build/HAPCUT2 /usr/local/bin/
           cd ..
-          
+
           # Verify installations
           echo "Checking tool versions..."
           minimap2 --version
           samtools --version | head -n 1
           bcftools --version | head -n 1
-          which extractHAIRS && echo "✓ extractHAIRS installed"
-          which HAPCUT2 && echo "✓ HAPCUT2 installed"
+          which extractHAIRS && echo "extractHAIRS installed"
+          which HAPCUT2 && echo "HAPCUT2 installed"
       
       - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
       - run: echo "🖥️ The workflow is now ready to test your code on the runner."
