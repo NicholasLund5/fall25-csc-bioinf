@@ -13,3 +13,13 @@ week1/code/__pycache__/dbg_kmer_as_key.cpython-312.pyc
 /week3/code/__pycache__
 test_phylo_codon_exe
 week4/code/main_exe
+week5/data/chr10.fa.gz
+week5/data/chr10.fa
+week5/data/illumina.fq
+week5/data/pacbio.fq
+week5/data/illumina_sorted.bam
+week5/data/illumina_sorted.bam.bai
+week5/data/pacbio_sorted.bam
+week5/data/pacbio_sorted.bam.bai
+week5/data/chr10.mmi
+week5/code/.ipynb_checkpoints/week5-checkpoint.ipynb
