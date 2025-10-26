@@ -27,18 +27,18 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install numpy biopython pytest jupyter nbconvert pandas
+          pip install numpy biopython pytest jupyter nbconvert nbclient pandas ipykernel
       
       - name: Install bioinformatics tools
         run: |
           sudo apt-get update
           sudo apt-get install -y wget samtools bcftools tabix bzip2 libbz2-dev libhts-dev
-
+          
           # Install minimap2
           wget https://github.com/lh3/minimap2/releases/download/v2.26/minimap2-2.26_x64-linux.tar.bz2
           tar -xjf minimap2-2.26_x64-linux.tar.bz2
           sudo cp minimap2-2.26_x64-linux/minimap2 /usr/local/bin/
-
+          
           # Install HapCUT2 using system htslib
           git clone --depth 1 https://github.com/vibansal/HapCUT2.git
           cd HapCUT2
@@ -46,7 +46,7 @@ jobs:
           sudo cp build/extractHAIRS /usr/local/bin/
           sudo cp build/HAPCUT2 /usr/local/bin/
           cd ..
-
+          
           # Verify installations
           echo "Checking tool versions..."
           minimap2 --version
@@ -62,4 +62,13 @@ jobs:
       - name: Week 5 - Pharmacogenomics Analysis
         run: |
           cd week5
+          
+          # Convert notebook to Python script temporarily for proper outputs
+          jupyter nbconvert --to python code/week5.ipynb --stdout > week5_temp.py
+          python week5_temp.py
+
           jupyter execute code/week5.ipynb --inplace
+
+          rm week5_temp.py
+          
+          echo "WEEK 5 COMPLETE"
