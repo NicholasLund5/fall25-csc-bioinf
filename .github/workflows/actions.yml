@@ -32,7 +32,7 @@ jobs:
       - name: Install bioinformatics tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget samtools bcftools tabix bzip2 libhts-dev
+          sudo apt-get install -y wget samtools bcftools tabix bzip2 libbz2-dev libhts-dev
 
           # Install minimap2
           wget https://github.com/lh3/minimap2/releases/download/v2.26/minimap2-2.26_x64-linux.tar.bz2
