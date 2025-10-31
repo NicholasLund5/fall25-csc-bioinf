@@ -1,74 +1,60 @@
 name: Github CI
-
 on: [push]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    
     steps:
       - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
       - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
       - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
-      
+
+      - name: Install Codon
+        run: |
+          mkdir -p ${HOME}/.codon
+          curl -L https://github.com/exaloop/codon/releases/download/v0.19.3/codon-linux-x86_64.tar.gz \
+            | tar zxvf - --strip-components=1 -C ${HOME}/.codon
+          curl -L https://github.com/exaloop/seq/releases/download/v0.11.5/seq-linux-x86_64.tar.gz \
+            | tar zxvf - -C ${HOME}/.codon/lib/codon/plugins
+          echo "${HOME}/.codon/bin" >> $GITHUB_PATH
+
       - name: Check out repository code
         uses: actions/checkout@v5
-      
+
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
-      
+
       - name: Install Python 3.11 dev headers
         run: |
           sudo add-apt-repository ppa:deadsnakes/ppa -y
           sudo apt-get update
           sudo apt-get install -y python3.11 python3.11-dev python3.11-venv
-      
+
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install numpy biopython pytest jupyter nbconvert nbclient pandas ipykernel
-      
-      - name: Install bioinformatics tools
+          pip install numpy biopython pytest
+
+      - name: Set up Codon Python bridge
         run: |
-          sudo apt-get update
-          sudo apt-get install -y wget samtools bcftools tabix bzip2 libbz2-dev libhts-dev
-          
-          # Install minimap2
-          wget https://github.com/lh3/minimap2/releases/download/v2.26/minimap2-2.26_x64-linux.tar.bz2
-          tar -xjf minimap2-2.26_x64-linux.tar.bz2
-          sudo cp minimap2-2.26_x64-linux/minimap2 /usr/local/bin/
-          
-          # Install HapCUT2 using system htslib
-          git clone --depth 1 https://github.com/vibansal/HapCUT2.git
-          cd HapCUT2
-          make USE_HTSLIB=system
-          sudo cp build/extractHAIRS /usr/local/bin/
-          sudo cp build/HAPCUT2 /usr/local/bin/
-          cd ..
-          
-          # Verify installations
-          echo "Checking tool versions..."
-          minimap2 --version
-          samtools --version | head -n 1
-          bcftools --version | head -n 1
-          which extractHAIRS && echo "extractHAIRS installed"
-          which HAPCUT2 && echo "HAPCUT2 installed"
-      
+          export CODON_PYTHON=$(curl -L https://raw.githubusercontent.com/exaloop/codon/refs/heads/develop/test/python/find-python-library.py | python)
+          echo "Found Python at: ${CODON_PYTHON}"
+          echo "CODON_PYTHON=${CODON_PYTHON}" >> $GITHUB_ENV
+
       - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
       - run: echo "🖥️ The workflow is now ready to test your code on the runner."
       
-      # Week 5
-      - name: Week 5 - Pharmacogenomics Analysis
-        run: |
-          cd week5
-          
-          # Convert notebook to Python script temporarily for proper outputs
-          jupyter nbconvert --to python code/week5.ipynb --stdout > week5_temp.py
-          python week5_temp.py
+      # - name: Week 1
+      #  run: bash week1/evaluate.sh
 
-          jupyter execute code/week5.ipynb --inplace
+      # - name: Week 2
+      #   env:
+      #     CODON_PYTHON: ${{ env.CODON_PYTHON }}
+      #   run: bash week2/evaluate.sh
 
-          rm week5_temp.py
-          
-          echo "WEEK 5 COMPLETE"
+      # - name: Week 3
+      #  run: bash week3/evaluate.sh
+
+      - name: Week 4
+        run: bash week4/evaluate.sh
