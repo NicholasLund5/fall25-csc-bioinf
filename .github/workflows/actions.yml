@@ -29,6 +29,4 @@ jobs:
       
       - name: Run LEfSe evaluation
         shell: bash -l {0}
-        run: |
-          cd project/lefse/example
-          bash evaluate_mouse_data.sh
+        run: bash project/example/evaluate_mouse_data.sh
