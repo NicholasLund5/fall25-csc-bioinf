@@ -24,19 +24,19 @@ export PYTHONPATH="$LEFSE_ROOT:$PYTHONPATH"
 # the value -1 for them.
 # -o 1000000 scales the feature such that the sum (of the same taxonomic leve)
 # is 1M: this is done only for obtaining more meaningful values for the LDA score
-python ../lefse/lefse_format_input.py mouse_data.txt mouse_data.in -c 1 -s 2 -u 3 -o 1000000
+python project/lefse/lefse_format_input.py mouse_data.txt mouse_data.in -c 1 -s 2 -u 3 -o 1000000
 
 # lefse_run.py performs the actual statistical analysis
 #
 # Apply LEfSe on the formatted data producing the results (to be further processed
 # for visualization with the other modules). The option available
 # can be listed using the -h option 
-python ../lefse/lefse_run.py mouse_data.in mouse_data.res -l 0.1
+python project/lefse/lefse_run.py mouse_data.in mouse_data.res -l 0.1
 # lefse_plot_res.py visualizes the output
 #
 # Plot the list of biomarkers with their effect size
 # Several graphical options are available for personalizing the output
-python ../lefse/lefse_plot_res.py mouse_data.res mouse_data.png
+python project/lefse/lefse_plot_res.py mouse_data.res mouse_data.png
 
 # lefse_plot_cladogram.py visualizes the output on a hierarchical tree
 #
@@ -45,7 +45,7 @@ python ../lefse/lefse_plot_res.py mouse_data.res mouse_data.png
 # In this case we will obtain the RDP taxonomy.
 # This is an early implementation of the module. I'm working on an improved version
 # that will be released independently from LEfSe
-python ../lefse/lefse_plot_cladogram.py mouse_data.res mouse_data.cladogram.png --format png --dpi 600
+python project./lefse/lefse_plot_cladogram.py mouse_data.res mouse_data.cladogram.png --format png --dpi 600
 
 # Create a directory for storing the raw-data representation of the discovered biomarkers
 mkdir -p biomarkers_raw_images
@@ -55,7 +55,7 @@ mkdir -p biomarkers_raw_images
 # The module for exporting the raw-data representation of the features.
 # With the default options we will obtain the images for all the features that are
 # detected as biomarkers
-python ../lefse/lefse_plot_features.py mouse_data.in mouse_data.res biomarkers_raw_images/
+python project/lefse/lefse_plot_features.py mouse_data.in mouse_data.res biomarkers_raw_images/
 
 ## bonus: seasonal greetings
 # echo '~ Oíche Shamhna féile dhuit!'
