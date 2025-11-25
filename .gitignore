@@ -32,3 +32,5 @@ week6/code/data/adata_annotated.h5ad
 week6/code/data/cell_type_distribution_final.png
 week6/code/data/annotation_plot.png
 week6/code/.ipynb_checkpoints/week6-checkpoint.ipynb
+project/lefse/__pycache__/lefse.cpython-313.pyc
+project/lefse/__pycache__/ValidateData.cpython-313.pyc
