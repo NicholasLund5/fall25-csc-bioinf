@@ -22,7 +22,8 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install numpy scipy matplotlib biom-format
+          pip install numpy scipy matplotlib
+          pip install "biom-format[legacy]" h5py
 
       - name: Run LEfSe evaluation
         shell: bash -l {0}
