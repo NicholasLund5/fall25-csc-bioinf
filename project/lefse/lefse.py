@@ -1,0 +1,262 @@
+import os, sys, math, pickle
+import random as lrand
+import argparse
+import numpy as np
+from scipy import stats
+
+def init():
+    lrand.seed(1982)
+
+def get_class_means(class_sl, feats):
+    means = {}
+    clk = list(class_sl.keys())
+    for fk, f in feats.items():
+        means[fk] = [np.mean((f[class_sl[k][0]:class_sl[k][1]])) for k in clk]
+    return clk, means
+
+def save_res(res, filename):
+    with open(filename, 'w') as out:
+        for k, v in res['cls_means'].items():
+            out.write(k + "\t" + str(math.log(max(max(v), 1.0), 10.0)) + "\t")
+            if k in res['cohens_res_th']:
+                for i, vv in enumerate(v):
+                    if vv == max(v):
+                        out.write(str(res['cls_means_kord'][i]) + "\t")
+                        break
+                out.write(str(res['cohens_res'][k]))
+            else:
+                out.write("\t")
+            out.write("\t" + (res['wilcox_res'][k] if 'wilcox_res' in res and k in res['wilcox_res'] else "-") + "\n")
+
+def load_data(input_file, nnorm=False):
+    with open(input_file, 'rb') as inputf:
+        inp = pickle.load(inputf)
+    if nnorm:
+        return inp['feats'], inp['cls'], inp['class_sl'], inp['subclass_sl'], inp['class_hierarchy'], inp['norm']
+    else:
+        return inp['feats'], inp['cls'], inp['class_sl'], inp['subclass_sl'], inp['class_hierarchy']
+
+def load_res(input_file):
+    with open(input_file, 'rb') as inputf:
+        inp = pickle.load(inputf)
+    return inp['res'], inp['params'], inp['class_sl'], inp['subclass_sl']
+
+def test_kw_r(cls, feats, p, factors):
+    factor_values = cls[factors[0]]
+    unique_groups = list(set(factor_values))
+    
+    groups = []
+    for group in unique_groups:
+        group_indices = [i for i, val in enumerate(factor_values) if val == group]
+        group_data = [feats[i] for i in group_indices]
+        groups.append(group_data)
+    
+    statistic, pvalue = stats.kruskal(*groups)
+    
+    return pvalue < p, pvalue
+
+def test_rep_wilcoxon_r(sl, cl_hie, feats, th, multiclass_strat, mul_cor, fn, min_c, comp_only_same_subcl, curv=False):
+    comp_all_sub = not comp_only_same_subcl
+    tot_ok = 0
+    alpha_mtc = th
+    all_diff = []
+    
+    for pair in [(x, y) for x in cl_hie.keys() for y in cl_hie.keys() if x < y]:
+        dir_cmp = "not_set"
+        l_subcl1, l_subcl2 = (len(cl_hie[pair[0]]), len(cl_hie[pair[1]]))
+        
+        if mul_cor != 0:
+            alpha_mtc = th * l_subcl1 * l_subcl2 if mul_cor == 2 else 1.0 - math.pow(1.0 - th, l_subcl1 * l_subcl2)
+        
+        ok = 0
+        curv_sign = 0
+        first = True
+        
+        for i, k1 in enumerate(cl_hie[pair[0]]):
+            br = False
+            for j, k2 in enumerate(cl_hie[pair[1]]):
+                if not comp_all_sub and k1[len(pair[0]):] != k2[len(pair[1]):]:
+                    ok += 1
+                    continue
+                
+                cl1 = feats[sl[k1][0]:sl[k1][1]]
+                cl2 = feats[sl[k2][0]:sl[k2][1]]
+                med_comp = False
+                
+                if len(cl1) < min_c or len(cl2) < min_c:
+                    med_comp = True
+                
+                sx, sy = np.median(cl1), np.median(cl2)
+                
+                if cl1[0] == cl2[0] and len(set(cl1)) == 1 and len(set(cl2)) == 1:
+                    tres, first = False, False
+                elif not med_comp:
+                    try:
+                        statistic, pv = stats.mannwhitneyu(cl1, cl2, alternative='two-sided')
+                        tres = pv < alpha_mtc * 2.0
+                    except ValueError:
+                        tres = False
+                
+                if first:
+                    first = False
+                    if not curv and (med_comp or tres):
+                        dir_cmp = sx < sy
+                    elif curv:
+                        dir_cmp = None
+                        if med_comp or tres:
+                            curv_sign += 1
+                            dir_cmp = sx < sy
+                    else:
+                        br = True
+                elif not curv and med_comp:
+                    if ((sx < sy) != dir_cmp or sx == sy):
+                        br = True
+                elif curv:
+                    if tres and dir_cmp == None:
+                        curv_sign += 1
+                        dir_cmp = sx < sy
+                    if tres and dir_cmp != (sx < sy):
+                        br = True
+                        curv_sign = -1
+                elif not tres or (sx < sy) != dir_cmp or sx == sy:
+                    br = True
+                
+                if br:
+                    break
+                ok += 1
+            
+            if br:
+                break
+        
+        if curv:
+            diff = curv_sign > 0
+        else:
+            diff = (ok == len(cl_hie[pair[1]]) * len(cl_hie[pair[0]]))
+        
+        if diff:
+            tot_ok += 1
+        if not diff and multiclass_strat:
+            return False
+        if diff and not multiclass_strat:
+            all_diff.append(pair)
+    
+    if not multiclass_strat:
+        tot_k = len(list(cl_hie.keys()))
+        for k in cl_hie.keys():
+            nk = 0
+            for a in all_diff:
+                if k in a:
+                    nk += 1
+            if nk == tot_k - 1:
+                return True
+        return False
+    
+    return True
+
+def contast_within_classes_or_few_per_class(feats, inds, min_cl, ncl):
+    ff = list(zip(*[v for n, v in feats.items() if n != 'class']))
+    cols = [ff[i] for i in inds]
+    cls = [feats['class'][i] for i in inds]
+    
+    if len(set(cls)) < ncl:
+        return True
+    
+    for c in set(cls):
+        if cls.count(c) < min_cl:
+            return True
+        cols_cl = [x for i, x in enumerate(cols) if cls[i] == c]
+        for i, col in enumerate(zip(*cols_cl)):
+            if (len(set(col)) <= min_cl and min_cl > 1) or (min_cl == 1 and len(set(col)) <= 1):
+                return True
+    
+    return False
+
+def test_cohens_d(cls, feats, cl_sl, boots, fract_sample, cohens_th, tol_min, nlogs):
+    fk = [k for k in feats.keys() if k not in ['class', 'subclass', 'subject']]
+    
+    if len(fk) == 0:
+        return None, None
+    
+    class_labels = cls['class']
+    unique_classes = list(set(class_labels))
+    n_samples = len(class_labels)
+    
+    feature_matrix = {}
+    for k in fk:
+        feature_matrix[k] = np.array(feats[k])
+    
+    effect_sizes = {k: [] for k in fk}
+    
+    boot_size = int(n_samples * fract_sample)
+    successful_boots = 0
+    
+    for boot_idx in range(boots):
+        boot_indices = [lrand.randint(0, n_samples - 1) for _ in range(boot_size)]
+        
+        boot_classes = [class_labels[i] for i in boot_indices]
+        
+        class_counts = {c: boot_classes.count(c) for c in unique_classes}
+        if any(count < 2 for count in class_counts.values()):
+            continue
+        
+        for feat_name in fk:
+            feat_values = feature_matrix[feat_name][boot_indices]
+            
+            class_means = []
+            class_stds = []
+            
+            for cls_label in unique_classes:
+                cls_indices = [i for i, c in enumerate(boot_classes) if c == cls_label]
+                cls_values = feat_values[cls_indices]
+                
+                class_means.append(np.mean(cls_values))
+                class_stds.append(np.std(cls_values, ddof=1))
+            
+            if len(unique_classes) == 2:
+                mean_diff = abs(class_means[0] - class_means[1])
+                pooled_std = math.sqrt((class_stds[0]**2 + class_stds[1]**2) / 2)
+                
+                if pooled_std > 1e-10:
+                    effect = mean_diff / pooled_std
+                else:
+                    effect = mean_diff / (abs(np.mean(class_means)) + 1e-10)
+            else:
+                max_diff = 0
+                for i in range(len(unique_classes)):
+                    for j in range(i + 1, len(unique_classes)):
+                        diff = abs(class_means[i] - class_means[j])
+                        if diff > max_diff:
+                            max_diff = diff
+                
+                avg_std = np.mean(class_stds)
+                if avg_std > 1e-10:
+                    effect = max_diff / avg_std
+                else:
+                    effect = max_diff / (np.mean([abs(m) for m in class_means]) + 1e-10)
+            
+            effect_sizes[feat_name].append(effect)
+        
+        successful_boots += 1
+    
+    if successful_boots < boots * 0.3:
+        return None, None
+    
+    results = {}
+    for feat_name in fk:
+        if len(effect_sizes[feat_name]) == 0:
+            continue
+        
+        avg_effect = np.mean(effect_sizes[feat_name])
+        
+        if avg_effect > 0:
+            log_score = math.log10(1.0 + 10.0 * avg_effect)
+            results[feat_name] = log_score
+        else:
+            results[feat_name] = 0.0
+    
+    significant = {k: v for k, v in results.items() if abs(v) > cohens_th}
+    
+    return results, significant
+
+def test_svm(cls, feats, cl_sl, boots, fract_sample, cohens_th, tol_min, nsvm):
+    return None
