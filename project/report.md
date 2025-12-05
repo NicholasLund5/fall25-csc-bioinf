@@ -24,7 +24,7 @@ Most metagenomic tools can detect biomarkers, but don’t provide the biological
 
 >***Schematic representation of the statistical and computational steps implemented in Segata Lab’s LEfSe and CEfSe(1).***  LEfSe preprocesses the metagenomic input, a matrix of taxa (rows) by samples (columns), by cleaning feature names, completing taxonomy levels, extracting numeric values, and generating the class, subclass, and subject labels, with an optional normalization step (1). The formatted data is then used in three analyses:
 
-**(a) Kruskal-Wallis rank-sum** is used to test whether the features differ across different biological classes. If the Kruskal-Wallis p-value < $ \alpha$  (default 0.05) then the feature is kept, otherwise it is discarded. 
+**(a) Kruskal-Wallis rank-sum** is used to test whether the features differ across different biological classes. If the Kruskal-Wallis p-value < $\alpha$  (default 0.05) then the feature is kept, otherwise it is discarded. 
 
 **(b) Pairwise Wilcoxon tests** checks that all the subclass comparisons support the same significant trend. The features that pass Wilcoxon’s are considered successful biomarkers.
 
