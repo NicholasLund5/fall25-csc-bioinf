@@ -123,7 +123,7 @@ Both cladograms use the same taxonomic tree, but the colored regions differ beca
 
 ### **Bar Plots**
 
-To reiterate, the bar plots differ due to the difference in the way effect size is calculated for LDA and Cohen's d. All the taxa detected in LEfSe’s is also present in CEfSe’s bar plot because Cohen’s d admits a larger set of features above the effect-size threshold. Even after  Kruskal-Wallis and Wilcoxon filtering, Cohen’s d tends to include more taxa because its standardized mean differences inflate when variance is low, pushing more features above the effect size threshold than LDA (1).
+To reiterate, the bar plots differ due to the difference in the way effect size is calculated for LDA and Cohen's d. All the taxa detected in LEfSe’s is also present in CEfSe’s bar plot because Cohen’s d admits a larger set of features above the effect size threshold. Even after  Kruskal-Wallis and Wilcoxon filtering, Cohen’s d tends to include more taxa because its standardized mean differences inflate when variance is low, pushing more features above the effect size threshold than LDA (1).
 
 The effect size scores ranges differ: LDA goes from -4 to +4 because it’s a log scaled discriminant distance, whereas Cohen’s d stays around -1.5 to +1 because it’s a standardized mean difference. In the bar plot, LDA showed that Firmicutes were enriched in the T-bet⁻/⁻ × Rag2⁻/⁻ mice and the same result can be observed in the Cohen’s bar plot, where the same Firmicutes related taxa end up on the green side; this  includes  Firmicutes, Clostridiales, Lachnospiraceae, Streptococcaceae, and Ruminococcaceae. The Actinobacteria patterns reported by LDA are also preserved under Cohen’s d. 
 
