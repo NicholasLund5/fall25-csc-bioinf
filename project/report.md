@@ -46,7 +46,8 @@ CEfSe was tested by reproducing the results from the mouse dataset. This dataset
 ## **DIFFERENCES BETWEEN LEfSe AND CEfSe**
 
 
->**Figure 2.** 
+>**Figure 2.**
+>
 >![CEfSe Pipeline](output_imgs/cefse_pipeline.png)
 >
 >*CEfSe statistical workflow using Cohen’s d in place of LDA.*
