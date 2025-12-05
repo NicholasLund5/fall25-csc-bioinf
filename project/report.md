@@ -129,7 +129,7 @@ The effect size scores ranges differ: LDA goes from -4 to +4 because it’s a lo
 
 Segata et al. (2011) note that Roseburia and Papillibacter are depleted in T-bet⁻/⁻ × Rag2⁻/⁻ mice even though Firmicutes is enriched overall. CEfSe matches this, showing both genera in the red (depleted) region.
 
-Some of the visual differences in the cladograms and bar plots also come from the plotting tools themselves. LEfSe’s plotting code was written in Python 2, using legacy biom imports and an older matplotlib API. In the updated pipeline, the same plotting logic is used but with newer matplotlib and numpy imports. Therefore the default settings change the node spacing, ring thickness, and where the labels and colored sectors are placed on the tree. 
+Some of the visual differences in the cladograms and bar plots also come from the plotting tools themselves. LEfSe’s plotting code was written in Python 2, using legacy `biom` imports and an older `Matplotlib` API. In the updated pipeline, the same plotting logic is used but with newer `Matplotlib` and `NumPy` imports. Therefore the default settings change the node spacing, ring thickness, and where the labels and colored sectors are placed on the tree. 
 
 
 ## **CONCLUSION**
