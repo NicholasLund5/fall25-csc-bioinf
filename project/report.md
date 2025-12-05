@@ -1,4 +1,4 @@
-# CEfSe: A pure Python-based reimplementation of LEfSe using Cohen’s d effect size 
+# CEfSe: A Pure Python-based Re-implementation of LEfSe using Cohen’s d Effect Size 
 
 Nicholas Lund¹, Olivia Whitelaw¹
 
@@ -22,7 +22,7 @@ Most metagenomic tools can detect biomarkers, but don’t provide the biological
 >**Figure 1.**
 >![CEfSe Pipeline](output_images/lefse_pipeline.png)
 
->***Schematic representation of the statistical and computational steps implemented in Segata Lab’s LEfSe and CEfSe(1).***  LEfSe preprocesses the metagenomic input by cleaning feature names, completing taxonomy levels, extracting numeric values, and generating the class, ?subclass, and subject labels, with an optional normalization step. The formatted data is then used in three analyses:
+>***Schematic representation of the statistical and computational steps implemented in Segata Lab’s LEfSe and CEfSe(1).***  LEfSe preprocesses the metagenomic input, a matrix of taxa (rows) by samples (columns), by cleaning feature names, completing taxonomy levels, extracting numeric values, and generating the class, subclass, and subject labels, with an optional normalization step (1). The formatted data is then used in three analyses:
 
 **(a) Kruskal-Wallis rank-sum** is used to test whether the features differ across different biological classes. If the Kruskal-Wallis p-value < $ \alpha$  (default 0.05) then the feature is kept, otherwise it is discarded. 
 
@@ -117,11 +117,11 @@ LEfSe does not include any CI/CD configuration. A GitHub Actions workflow was ad
 
 ### **Cladograms**
 
-Both cladograms use the same taxonomic tree, but the colored regions differ because each method selects a different set of features as being enriched. This difference comes from switching the effect size calculation: LEfSe uses LDA scores, while CEfSe uses Cohen’s d. This makes sense because each method holds different statistical assumptions. In LEfSe, LDA is applied to each feature independently after the Kruskal-Wallis and Wilcoxon filtering steps, so the score reflects how well that single feature separates the classes (1). CEfSe replaces this with Cohen’s d, which standardizes the difference in class means using the pooled standard deviation (2). Because these two effect-size measures scale features differently, some taxa cross the cut off under LDA but not under Cohen’s d, and vice versa.
+Both cladograms use the same taxonomic tree, but the colored regions differ because each method selects a different set of features as being enriched. This difference comes from switching the effect size calculation: LEfSe uses LDA scores, while CEfSe uses Cohen’s d. This makes sense because each method holds different statistical assumptions. In LEfSe, LDA is applied to each feature independently after the Kruskal-Wallis and Wilcoxon filtering steps, so the score reflects how well that single feature separates the classes (1). CEfSe replaces this with Cohen’s d, which standardizes the difference in class means using the pooled standard deviation (2). Because these two effect size measures scale features differently, some taxa cross the cut off under LDA but not under Cohen’s d, and vice versa.
 
 ### **Bar Plots**
 
-To reiterate, the bar plots differ due to the difference in the way effect size is calculated for LDA and Cohen's d. All the taxa detected in LEfSe’s is also present in CEfSe’s bar plot because Cohen’s d admits a larger set of features above the effect-size threshold. Even after  Kruskal-Wallis and Wilcoxon filtering, Cohen’s d tends to include more taxa because its standardized mean differences inflate when variance is low, pushing more features above the effect-size threshold than LDA (1).
+To reiterate, the bar plots differ due to the difference in the way effect size is calculated for LDA and Cohen's d. All the taxa detected in LEfSe’s is also present in CEfSe’s bar plot because Cohen’s d admits a larger set of features above the effect-size threshold. Even after  Kruskal-Wallis and Wilcoxon filtering, Cohen’s d tends to include more taxa because its standardized mean differences inflate when variance is low, pushing more features above the effect size threshold than LDA (1).
 
 The effect size scores ranges differ: LDA goes from -4 to +4 because it’s a log scaled discriminant distance, whereas Cohen’s d stays around -1.5 to +1 because it’s a standardized mean difference. In the bar plot, LDA showed that Firmicutes were enriched in the T-bet⁻/⁻ × Rag2⁻/⁻ mice and the same result can be observed in the Cohen’s bar plot, where the same Firmicutes related taxa end up on the green side; this  includes  Firmicutes, Clostridiales, Lachnospiraceae, Streptococcaceae, and Ruminococcaceae. The Actinobacteria patterns reported by LDA are also preserved under Cohen’s d. 
 
@@ -137,7 +137,7 @@ The primary objectives for CEfSe was to port the code from Python 2 to Python 3 
 
 ***Personal Reflection on the LEfSe Pipeline***
 
-LEfSe has started to get some pushback in newer studies, and the PreLect paper (Chen et al. 2025) calls out a few familiar issues: it tends to over-select features, leans heavily on low-prevalence taxa, and its LDA scores can turn random noise into “biomarkers.” Basically, it gives you long lists that look scientific but aren’t always reproducible across cohorts. PreLect doesn’t evaluate LDA directly, but the weaknesses it identifies in LEfSe’s effect-size step naturally raise the question of whether LDA is still the right model for this kind of data. On top of that, the original LEfSe repository is outdated, rarely maintained, and full of small but genuinely annoying syntax errors. All of this makes it reasonable to look beyond LDA. 
+LEfSe has started to get some pushback in newer studies, and the PreLect paper (Chen et al. 2025) calls out a few familiar issues: it tends to over-select features, leans heavily on low-prevalence taxa, and its LDA scores can turn random noise into “biomarkers.” Basically, it gives you long lists that look scientific but aren’t always reproducible across cohorts. PreLect doesn’t evaluate LDA directly, but the weaknesses it identifies in LEfSe’s effect size step naturally raise the question of whether LDA is still the right model for this kind of data. On top of that, the original LEfSe repository is outdated, rarely maintained, and full of small but genuinely annoying syntax errors. All of this makes it reasonable to look beyond LDA. 
 
 *Conflict of Interest*  None declared.
 
