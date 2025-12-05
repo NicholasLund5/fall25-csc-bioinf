@@ -20,7 +20,7 @@ Most metagenomic tools can detect biomarkers, but don’t provide the biological
 
 ## **MATERIALS AND METHODS**
 >**Figure 1.**
->![CEfSe Pipeline](output_images/lefse_pipeline.png)
+>![CEfSe Pipeline](output_imgs/lefse_pipeline.png)
 
 >***Schematic representation of the statistical and computational steps implemented in Segata Lab’s LEfSe and CEfSe(1).***  LEfSe preprocesses the metagenomic input, a matrix of taxa (rows) by samples (columns), by cleaning feature names, completing taxonomy levels, extracting numeric values, and generating the class, subclass, and subject labels, with an optional normalization step (1). The formatted data is then used in three analyses:
 
@@ -47,7 +47,7 @@ CEfSe was tested by reproducing the results from the mouse dataset. This dataset
 
 
 >**Figure 2.** 
->![CEfSe Pipeline](output_images/cefse_pipeline.png)
+>![CEfSe Pipeline](output_imgs/cefse_pipeline.png)
 >*CEfSe statistical workflow using Cohen’s d in place of LDA.*
 
 ### **1. Resolving Syntax Errors**  
@@ -105,15 +105,15 @@ LEfSe does not include any CI/CD configuration. A GitHub Actions workflow was ad
 ## **RESULTS**
 
 >**Figure 3.**  
->![LEfSe Results](output_images/lefse_output.png)
+>![LEfSe Results](output_imgs/lefse_output.png)
 >>LEfSe Results: Cladogram and LDA Bar Plot
 
 >**Figure 4.**
->![CEfSe Results](output_images/cefse_output.png)
+>![CEfSe Results](output_imgs/cefse_output.png)
 >>CEfSe Results: Cladogram and Cohen’s d Bar Plot
 >>
 
->*A cladogram is used to show which microbial groups  are different between two classes and how those features are related to each other in the phylogenetic tree. The nodes are colored depending on which class shows higher levels of that feature (red representing high values and green low) (1). CEfSe was run on the same T-bet⁻/⁻ × Rag2⁻/⁻ vs. Rag2⁻/⁻ dataset used in the original analysis. The original study reported 19 differentially abundant clades using LDA, and those same major taxa show up in CEfSe’s output as well (1).* 
+>*A cladogram is used to show which microbial groups  are different between two classes and how those features are related to each other in the phylogenetic tree. The nodes are colored depending on which class shows higher levels of that feature (red representing high values and green low) (1). The bar chart's displays the effect sizes for each taxon, indicating both the direction and magnitude of their contribution to differences between the two microbial communities (1). CEfSe was run on the same T-bet⁻/⁻ × Rag2⁻/⁻ vs. Rag2⁻/⁻ dataset used in the original analysis. The original study reported 19 differentially abundant clades using LDA, and those same major taxa show up in CEfSe’s output as well (1).* 
 
 ### **Cladograms**
 
